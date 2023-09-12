@@ -23,8 +23,8 @@ var (
 )
 
 const (
-	NotifTopic = "notif"
-	MailTopic  = "mail"
+	TopicNotif = "notif"
+	TopicMail  = "mail"
 )
 
 func init() {
@@ -46,7 +46,7 @@ func clearExchanges() error {
 
 	// Delete the exchange
 	err = ch.ExchangeDelete(
-		NotifTopic, // Exchange name
+		TopicNotif, // Exchange name
 		false,      // IfUnused
 		false,      // NoWait
 	)
@@ -59,7 +59,7 @@ func clearExchanges() error {
 
 func (p *RabbitmqStore) Send(exchange string, message interface{}) error {
 	switch exchange {
-	case NotifTopic:
+	case TopicNotif:
 		tries := 0
 		for {
 			if client.IsReady == false {
@@ -118,7 +118,7 @@ func (p *RabbitmqStore) Send(exchange string, message interface{}) error {
 
 		log.Printf(" [x] Sent %s", message)
 
-	case MailTopic:
+	case TopicMail:
 		ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 		defer cancel()
 

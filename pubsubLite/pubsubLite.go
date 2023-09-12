@@ -26,6 +26,10 @@ var (
 	topicToSub         = make(map[string]string)
 )
 
+const (
+	TopicAction = "action"
+)
+
 type PubSubLiteStore struct {
 }
 
