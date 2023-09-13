@@ -16,6 +16,7 @@ import (
 
 var (
 	ctx                context.Context
+	rcvErr             error
 	projectID          = "490242039522"
 	zone               = "asia-east1"
 	ActionSubscription = config.GetString("SUBSCRIPTION_ACTION")
@@ -162,14 +163,14 @@ func (ps *PubSubLiteStore) Receive(topic string) (<-chan []byte, error) {
 				// Metadata decoded from the message ID contains the partition and offset.
 				_, err = pscompat.ParseMessageMetadata(msg.ID)
 				if err != nil {
+					rcvErr = err
 					return
 				}
 
 				byteCh <- msg.Data
 				msg.Ack()
 			}); err != nil {
-				cancel()
-				return
+				rcvErr = err
 			}
 
 			cancel()
