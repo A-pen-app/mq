@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
 	"strings"
 	"time"
 
@@ -115,8 +114,6 @@ func (p *RabbitmqStore) Send(exchange string, message interface{}) error {
 		if err != nil {
 			return err
 		}
-
-		log.Printf(" [x] Sent %s", message)
 
 	case TopicMail:
 		ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
