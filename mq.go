@@ -15,18 +15,16 @@ type MQ interface {
 	Receive(topic string) (<-chan []byte, error)
 }
 
-var (
-	ctx context.Context
-)
-
-func init() {
+type Config struct {
+	IsProduction bool
+	Pubsub       *pubsubLite.Config
+	Rabbitmq     *rabbitmq.Config
 }
 
 // Initialize ...
-func Initialize(ictx context.Context) {
-	ctx = ictx
-	rabbitmq.Initialize(ctx)
-	pubsubLite.Initialize(ctx)
+func Initialize(ctx context.Context, config Config) {
+	rabbitmq.Initialize(ctx, config.Rabbitmq)
+	pubsubLite.Initialize(ctx, config.Pubsub)
 }
 
 // Finalize ...

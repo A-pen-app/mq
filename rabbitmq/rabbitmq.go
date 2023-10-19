@@ -3,7 +3,6 @@ package rabbitmq
 import (
 	"time"
 
-	"github.com/A-pen-app/mq/config"
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
@@ -14,9 +13,9 @@ type rabbitmqClient struct {
 	IsReady bool
 }
 
-func NewClient() *rabbitmqClient {
+func NewClient(url string) *rabbitmqClient {
 	r := rabbitmqClient{
-		mqurl: config.RabbitmqConnURL,
+		mqurl: url,
 	}
 	return &r
 }

@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/A-pen-app/mq/config"
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
@@ -26,13 +25,21 @@ const (
 	TopicMail  = "mail"
 )
 
-func init() {
+var projectName string
+
+type Config struct {
+	ProjectName     string
+	RabbitmqConnURL string
 }
 
 // Initialize ...
-func Initialize(ictx context.Context) {
-	ctx = ictx
-	client = NewClient()
+func Initialize(ctx context.Context, config *Config) {
+	if config == nil {
+		return
+	}
+
+	projectName = config.ProjectName
+	client = NewClient(config.RabbitmqConnURL)
 	client.connect(time.Second)
 }
 
@@ -103,10 +110,10 @@ func (p *RabbitmqStore) Send(exchange string, message interface{}) error {
 		}
 
 		err = ch.PublishWithContext(ctx,
-			ex,                               // exchange
-			config.GetString("PROJECT_NAME"), // routing key
-			false,                            // mandatory
-			false,                            // immediate
+			ex,          // exchange
+			projectName, // routing key
+			false,       // mandatory
+			false,       // immediate
 			amqp.Publishing{
 				ContentType: "text/plain",
 				Body:        body,
@@ -245,6 +252,7 @@ func (p *RabbitmqStore) Receive(topic string) (<-chan []byte, error) {
 
 // Finalize ...
 func Finalize() {
-	// Nothing to be done
-	client.conn.Close()
+	if client != nil {
+		client.conn.Close()
+	}
 }

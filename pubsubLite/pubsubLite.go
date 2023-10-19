@@ -10,59 +10,41 @@ import (
 
 	"cloud.google.com/go/pubsub"
 	"cloud.google.com/go/pubsublite/pscompat"
-	"github.com/A-pen-app/mq/config"
 	"golang.org/x/sync/errgroup"
 )
 
 var (
-	ctx                context.Context
-	rcvErr             error
-	projectID          = "490242039522"
-	zone               = "asia-east1"
-	ActionSubscription = config.GetString("SUBSCRIPTION_ACTION")
-	ActionTopic        = config.GetString("TOPIC_ACTION")
-	receiveTimeout     = 24 * 60 * 60 * time.Second
-	isProduction       = config.GetBool("PRODUCTION_ENVIRONMENT")
-	publisher          = make(map[string]*pscompat.PublisherClient)
-	topicToSub         = make(map[string]string)
+	receiveTimeout = 24 * 60 * 60 * time.Second
+	publisher      = make(map[string]*pscompat.PublisherClient)
+	c              *Config
 )
 
-const (
-	TopicAction = "action"
-)
+type Config struct {
+	ProjectID    string
+	RegionOrZone string
+	Topics       map[string]string
+}
 
 type PubSubLiteStore struct {
 }
 
-func init() {
-	topicToSub[ActionTopic] = ActionSubscription
-}
-
 // FIXME: Reservation, topic, and subscription health check and initialization is to be added in the future.
-func Initialize(ictx context.Context) {
-	ctx = ictx
-
-	topicPath := fmt.Sprintf("projects/%s/locations/%s/topics/%s", projectID, zone, ActionTopic)
-
-	// Create the publisher client.
-	p, err := pscompat.NewPublisherClient(ctx, topicPath)
-	if err != nil {
+func Initialize(ctx context.Context, config *Config) {
+	if config == nil {
 		return
 	}
-	publisher[ActionTopic] = p
 
-	/*
-		ch, err := (&PubSubLiteStore{}).Receive(ActionTopic)
+	for topic := range config.Topics {
+		topicPath := fmt.Sprintf("projects/%s/locations/%s/topics/%s", config.ProjectID, config.RegionOrZone, topic)
+
+		// Create the publisher client.
+		p, err := pscompat.NewPublisherClient(ctx, topicPath)
 		if err != nil {
-			logging.Error(ctx, err.Error())
-			return
+			continue
 		}
-		for {
-			msg := <-ch
-			logging.Debug(ctx, "msg: %s", string(msg))
-		}
-		(&PubSubLiteStore{}).Send(ActionTopic, "DEBUG: test message")
-	*/
+		publisher[topic] = p
+	}
+	c = config
 }
 
 func (ps *PubSubLiteStore) Send(topic string, data interface{}) error {
@@ -73,6 +55,7 @@ func (ps *PubSubLiteStore) Send(topic string, data interface{}) error {
 	var toRepublish []*pubsub.Message
 	var toRepublishMu sync.Mutex
 
+	ctx := context.Background()
 	// Publish messages. Messages are automatically batched.
 	g := new(errgroup.Group)
 
@@ -123,13 +106,14 @@ func (ps *PubSubLiteStore) Send(topic string, data interface{}) error {
 }
 
 func (ps *PubSubLiteStore) Receive(topic string) (<-chan []byte, error) {
+	ctx := context.Background()
 	var subID string
-	if v, exist := topicToSub[topic]; exist {
+	if v, exist := c.Topics[topic]; exist {
 		subID = v
 	} else {
 		return nil, errors.New("The provided topic does not exist.")
 	}
-	subscriptionPath := fmt.Sprintf("projects/%s/locations/%s/subscriptions/%s", projectID, zone, subID)
+	subscriptionPath := fmt.Sprintf("projects/%s/locations/%s/subscriptions/%s", c.ProjectID, c.RegionOrZone, subID)
 
 	// Configure flow control settings. These settings apply per partition.
 	// The message stream is paused based on the maximum size or number of
@@ -154,7 +138,8 @@ func (ps *PubSubLiteStore) Receive(topic string) (<-chan []byte, error) {
 	}
 
 	byteCh := make(chan []byte)
-	go func(ctx context.Context, s *pscompat.SubscriberClient, ch chan<- []byte) {
+	errCh := make(chan error)
+	go func(ctx context.Context, s *pscompat.SubscriberClient, ch chan []byte, errCh chan error) {
 		for {
 			ctx, cancel := context.WithTimeout(ctx, receiveTimeout)
 
@@ -163,19 +148,19 @@ func (ps *PubSubLiteStore) Receive(topic string) (<-chan []byte, error) {
 				// Metadata decoded from the message ID contains the partition and offset.
 				_, err = pscompat.ParseMessageMetadata(msg.ID)
 				if err != nil {
-					rcvErr = err
+					errCh <- err
 					return
 				}
 
 				byteCh <- msg.Data
 				msg.Ack()
 			}); err != nil {
-				rcvErr = err
+				errCh <- err
 			}
 
 			cancel()
 		}
-	}(ctx, s, byteCh)
+	}(ctx, s, byteCh, errCh)
 
 	// logging.Info(ctx, fmt.Sprintf("Received %d messages\n", receiveCount))
 	return byteCh, nil
@@ -183,9 +168,8 @@ func (ps *PubSubLiteStore) Receive(topic string) (<-chan []byte, error) {
 
 // Finalize ...
 func Finalize() {
-	// Nothing to be done
 	// Ensure the publisher will be shut down.
 	for _, v := range publisher {
-		defer v.Stop()
+		v.Stop()
 	}
 }
