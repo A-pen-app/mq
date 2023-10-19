@@ -16,13 +16,15 @@ type MQ interface {
 }
 
 type Config struct {
-	IsProduction bool
-	Pubsub       *pubsubLite.Config
-	Rabbitmq     *rabbitmq.Config
+	Pubsub   *pubsubLite.Config
+	Rabbitmq *rabbitmq.Config
 }
 
 // Initialize ...
-func Initialize(ctx context.Context, config Config) {
+func Initialize(ctx context.Context, config *Config) {
+	if config == nil {
+		return
+	}
 	rabbitmq.Initialize(ctx, config.Rabbitmq)
 	pubsubLite.Initialize(ctx, config.Pubsub)
 }
