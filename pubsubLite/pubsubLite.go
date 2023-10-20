@@ -107,12 +107,12 @@ func (ps *PubSubLiteStore) Send(topic string, data interface{}) error {
 
 func (ps *PubSubLiteStore) Receive(topic string) (<-chan []byte, error) {
 	ctx := context.Background()
-	var subID string
-	if v, exist := c.Topics[topic]; exist {
-		subID = v
-	} else {
-		return nil, errors.New("The provided topic does not exist.")
+
+	subID, exist := c.Topics[topic]
+	if !exist || len(subID) == 0 {
+		return nil, errors.New("topic or subscription does not exist")
 	}
+
 	subscriptionPath := fmt.Sprintf("projects/%s/locations/%s/subscriptions/%s", c.ProjectID, c.RegionOrZone, subID)
 
 	// Configure flow control settings. These settings apply per partition.
