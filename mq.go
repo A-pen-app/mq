@@ -29,6 +29,14 @@ func Initialize(ctx context.Context, config *Config) {
 	pubsubLite.Initialize(ctx, config.Pubsub)
 }
 
+func GetPubsub() MQ {
+	return &pubsubLite.Store{}
+}
+
+func GetRabbitmq() MQ {
+	return &rabbitmq.Store{}
+}
+
 // Finalize ...
 func Finalize() {
 	rabbitmq.Finalize()

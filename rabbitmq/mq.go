@@ -11,7 +11,7 @@ import (
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
-type RabbitmqStore struct {
+type Store struct {
 }
 
 var (
@@ -63,7 +63,7 @@ func clearExchanges() error {
 	return nil
 }
 
-func (p *RabbitmqStore) Send(exchange string, message interface{}) error {
+func (p *Store) Send(exchange string, message interface{}) error {
 	switch exchange {
 	case TopicNotif:
 		tries := 0
@@ -168,7 +168,7 @@ func (p *RabbitmqStore) Send(exchange string, message interface{}) error {
 	return nil
 }
 
-func (p *RabbitmqStore) Receive(topic string) (<-chan []byte, error) {
+func (p *Store) Receive(topic string) (<-chan []byte, error) {
 	s := strings.Split(topic, "-")
 	if len(s) != 2 {
 		return nil, errors.New("RabbitMQ Topic format incorrect: Should be of form 'Topic-Project', eg: notif-apen")

@@ -25,8 +25,7 @@ type Config struct {
 	Topics       map[string]string
 }
 
-type PubSubLiteStore struct {
-}
+type Store struct{}
 
 // FIXME: Reservation, topic, and subscription health check and initialization is to be added in the future.
 func Initialize(ctx context.Context, config *Config) {
@@ -47,7 +46,7 @@ func Initialize(ctx context.Context, config *Config) {
 	c = config
 }
 
-func (ps *PubSubLiteStore) Send(topic string, data interface{}) error {
+func (ps *Store) Send(topic string, data interface{}) error {
 	p := publisher[topic]
 
 	// Collect any messages that need to be republished with a new publisher
@@ -105,7 +104,7 @@ func (ps *PubSubLiteStore) Send(topic string, data interface{}) error {
 	return nil
 }
 
-func (ps *PubSubLiteStore) Receive(topic string) (<-chan []byte, error) {
+func (ps *Store) Receive(topic string) (<-chan []byte, error) {
 	ctx := context.Background()
 
 	subID, exist := c.Topics[topic]
