@@ -14,6 +14,7 @@ type MQ interface {
 
 	// or, pass messages back to client
 	Receive(topic string) (<-chan []byte, error)
+	ReceiveWithContext(ctx context.Context, topic string) (<-chan []byte, error)
 }
 
 type Config struct {

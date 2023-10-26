@@ -173,6 +173,11 @@ func (p *Store) Send(exchange string, message interface{}) error {
 	return nil
 }
 
+func (p *Store) ReceiveWithContext(ctx context.Context, topic string) (<-chan []byte, error) {
+	// FIXME propagate context through rabbitmq messages
+	return p.Receive(topic)
+}
+
 func (p *Store) Receive(topic string) (<-chan []byte, error) {
 	s := strings.Split(topic, "-")
 	if len(s) != 2 {

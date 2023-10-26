@@ -12,6 +12,8 @@ import (
 	"cloud.google.com/go/pubsublite/pscompat"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/propagation"
+	semconv "go.opentelemetry.io/otel/semconv/v1.4.0"
+	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -53,6 +55,17 @@ func (ps *Store) SendWithContext(ctx context.Context, topic string, data interfa
 	if p == nil {
 		return errors.New("publisher not found")
 	}
+	options := []trace.SpanStartOption{
+		trace.WithSpanKind(trace.SpanKindProducer),
+		trace.WithAttributes(
+			semconv.MessagingSystemKey.String("pubsub"),
+			semconv.MessagingDestinationKey.String(topic),
+			semconv.MessagingDestinationKindTopic,
+		),
+	}
+	_, span := otel.Tracer("publisher:"+topic).Start(ctx, "pubsub.sendwithcontext", options...)
+	defer span.End()
+
 	payload, err := json.Marshal(data)
 	if err != nil {
 		return err
@@ -63,9 +76,11 @@ func (ps *Store) SendWithContext(ctx context.Context, topic string, data interfa
 	}
 	otel.GetTextMapPropagator().Inject(ctx, propagation.MapCarrier(msg.Attributes))
 
-	if _, err := p.Publish(ctx, &msg).Get(ctx); err != nil {
+	msgID, err := p.Publish(ctx, &msg).Get(ctx)
+	if err != nil {
 		return err
 	}
+	span.SetAttributes(semconv.MessagingMessageIDKey.String(msgID))
 	return nil
 
 }
@@ -128,12 +143,61 @@ func (ps *Store) Send(topic string, data interface{}) error {
 	return nil
 }
 
+func (ps *Store) ReceiveWithContext(ctx context.Context, topic string) (<-chan []byte, error) {
+	subID, exist := c.Topics[topic]
+	if !exist || len(subID) == 0 {
+		return nil, errors.New("topic or subscription not found")
+	}
+	subscriptionPath := fmt.Sprintf("projects/%s/locations/%s/subscriptions/%s", c.ProjectID, c.RegionOrZone, subID)
+	settings := pscompat.ReceiveSettings{
+		MaxOutstandingBytes:    10 * 1024 * 1024,
+		MaxOutstandingMessages: 1000,
+	}
+	s, err := pscompat.NewSubscriberClientWithSettings(
+		ctx,
+		subscriptionPath,
+		settings,
+	)
+	if err != nil {
+		return nil, err
+	}
+	byteCh := make(chan []byte)
+	errCh := make(chan error)
+	go func(ctx context.Context, s *pscompat.SubscriberClient, ch chan []byte, errCh chan error) {
+		if err := s.Receive(ctx, func(ctx context.Context, msg *pubsub.Message) {
+			if msg.Attributes != nil {
+				propagator := otel.GetTextMapPropagator()
+				ctx = propagator.Extract(ctx, propagation.MapCarrier(msg.Attributes))
+			}
+			options := []trace.SpanStartOption{
+				trace.WithSpanKind(trace.SpanKindConsumer),
+				trace.WithAttributes(
+					semconv.MessagingSystemKey.String("pubsub"),
+					semconv.MessagingDestinationKey.String(subID),
+					semconv.MessagingDestinationKindTopic,
+					semconv.MessagingMessageIDKey.String(msg.ID),
+				),
+			}
+			ctx, span := otel.Tracer("subscriber:"+topic).Start(ctx, "pubsub.receivewithcontext", options...)
+			defer span.End()
+
+			byteCh <- msg.Data
+			msg.Ack()
+		}); err != nil {
+			errCh <- err
+		}
+	}(ctx, s, byteCh, errCh)
+
+	return byteCh, nil
+
+}
+
 func (ps *Store) Receive(topic string) (<-chan []byte, error) {
 	ctx := context.Background()
 
 	subID, exist := c.Topics[topic]
 	if !exist || len(subID) == 0 {
-		return nil, errors.New("topic or subscription does not exist")
+		return nil, errors.New("topic or subscription not found")
 	}
 
 	subscriptionPath := fmt.Sprintf("projects/%s/locations/%s/subscriptions/%s", c.ProjectID, c.RegionOrZone, subID)
