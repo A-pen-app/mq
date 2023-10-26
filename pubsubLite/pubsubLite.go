@@ -10,6 +10,8 @@ import (
 
 	"cloud.google.com/go/pubsub"
 	"cloud.google.com/go/pubsublite/pscompat"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/propagation"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -44,6 +46,28 @@ func Initialize(ctx context.Context, config *Config) {
 		publisher[topic] = p
 	}
 	c = config
+}
+
+func (ps *Store) SendWithContext(ctx context.Context, topic string, data interface{}) error {
+	p := publisher[topic]
+	if p == nil {
+		return errors.New("publisher not found")
+	}
+	payload, err := json.Marshal(data)
+	if err != nil {
+		return err
+	}
+	msg := pubsub.Message{
+		Data:       payload,
+		Attributes: make(map[string]string),
+	}
+	otel.GetTextMapPropagator().Inject(ctx, propagation.MapCarrier(msg.Attributes))
+
+	if _, err := p.Publish(ctx, &msg).Get(ctx); err != nil {
+		return err
+	}
+	return nil
+
 }
 
 func (ps *Store) Send(topic string, data interface{}) error {
