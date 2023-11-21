@@ -33,7 +33,8 @@ type Config struct {
 }
 
 // Initialize ...
-func Initialize(ctx context.Context, config *Config) {
+func Initialize(c context.Context, config *Config) {
+	ctx = c
 	if config == nil {
 		return
 	}
