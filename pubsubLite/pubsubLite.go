@@ -87,6 +87,9 @@ func (ps *Store) SendWithContext(ctx context.Context, topic string, data interfa
 
 func (ps *Store) Send(topic string, data interface{}) error {
 	p := publisher[topic]
+	if p == nil {
+		return errors.New("publisher not found")
+	}
 
 	// Collect any messages that need to be republished with a new publisher
 	// client.
@@ -178,7 +181,7 @@ func (ps *Store) ReceiveWithContext(ctx context.Context, topic string) (<-chan [
 					semconv.MessagingMessageIDKey.String(msg.ID),
 				),
 			}
-			ctx, span := otel.Tracer("subscriber:"+topic).Start(ctx, "pubsub.receivewithcontext", options...)
+			_, span := otel.Tracer("subscriber:"+topic).Start(ctx, "pubsub.receivewithcontext", options...)
 			defer span.End()
 
 			byteCh <- msg.Data
