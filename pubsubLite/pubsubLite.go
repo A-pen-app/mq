@@ -39,20 +39,30 @@ func Initialize(ctx context.Context, config *Config) {
 
 	for topic := range config.Topics {
 		topicPath := fmt.Sprintf("projects/%s/locations/%s/topics/%s", config.ProjectID, config.RegionOrZone, topic)
+		println("topicPath:", topicPath)
 
 		// Create the publisher client.
 		p, err := pscompat.NewPublisherClient(ctx, topicPath)
 		if err != nil {
+			println("err:", err.Error())
 			continue
 		}
 		publisher[topic] = p
 	}
 	c = config
+
+	for k, v := range publisher {
+		println("key:", k, "value:", v)
+	}
 }
 
 func (ps *Store) SendWithContext(ctx context.Context, topic string, data interface{}) error {
 	p := publisher[topic]
 	if p == nil {
+		println("publisher not found with topic:", topic)
+		for k, v := range publisher {
+			println("key: ", k, "value: ", v)
+		}
 		return errors.New("publisher not found")
 	}
 	options := []trace.SpanStartOption{
