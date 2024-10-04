@@ -51,8 +51,8 @@ func Initialize(ctx context.Context, config *Config) {
 	}
 	c = config
 
-	for k, v := range publisher {
-		println("key:", k, "value: %+v", v)
+	for k := range publisher {
+		println("key in publisher:", k)
 	}
 }
 
@@ -94,11 +94,11 @@ func (ps *Store) SendWithContext(ctx context.Context, topic string, data interfa
 func (ps *Store) Send(topic string, data interface{}) error {
 	p := publisher[topic]
 	if p == nil {
-		println("publisher not found with topic:", topic)
-		for k, v := range publisher {
-			println("key: ", k, "value: %+v", v)
+		publishers := ""
+		for k := range publisher {
+			publishers = publishers + " " + k
 		}
-		return errors.New("publisher not found")
+		return fmt.Errorf("publisher not found, topic: %s, key in publisher [%s]", topic, publishers)
 	}
 
 	// Collect any messages that need to be republished with a new publisher
