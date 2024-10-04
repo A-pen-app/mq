@@ -59,10 +59,6 @@ func Initialize(ctx context.Context, config *Config) {
 func (ps *Store) SendWithContext(ctx context.Context, topic string, data interface{}) error {
 	p := publisher[topic]
 	if p == nil {
-		println("publisher not found with topic:", topic)
-		for k, v := range publisher {
-			println("key: ", k, "value: %+v", v)
-		}
 		return errors.New("publisher not found")
 	}
 	options := []trace.SpanStartOption{
@@ -98,6 +94,10 @@ func (ps *Store) SendWithContext(ctx context.Context, topic string, data interfa
 func (ps *Store) Send(topic string, data interface{}) error {
 	p := publisher[topic]
 	if p == nil {
+		println("publisher not found with topic:", topic)
+		for k, v := range publisher {
+			println("key: ", k, "value: %+v", v)
+		}
 		return errors.New("publisher not found")
 	}
 
