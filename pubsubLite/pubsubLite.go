@@ -52,7 +52,7 @@ func Initialize(ctx context.Context, config *Config) {
 	c = config
 
 	for k, v := range publisher {
-		println("key:", k, "value:", v)
+		println("key:", k, "value: %+v", v)
 	}
 }
 
@@ -61,7 +61,7 @@ func (ps *Store) SendWithContext(ctx context.Context, topic string, data interfa
 	if p == nil {
 		println("publisher not found with topic:", topic)
 		for k, v := range publisher {
-			println("key: ", k, "value: ", v)
+			println("key: ", k, "value: %+v", v)
 		}
 		return errors.New("publisher not found")
 	}
