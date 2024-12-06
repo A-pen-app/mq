@@ -3,6 +3,7 @@ package mq
 import (
 	"context"
 
+	"github.com/A-pen-app/mq/models"
 	"github.com/A-pen-app/mq/pubsub"
 	"github.com/A-pen-app/mq/pubsubLite"
 	"github.com/A-pen-app/mq/rabbitmq"
@@ -10,8 +11,8 @@ import (
 
 type MQ interface {
 	// send some data to a topic
-	Send(topic string, data interface{}, attributes map[string]string) error
-	SendWithContext(ctx context.Context, topic string, data interface{}, attributes map[string]string) error
+	Send(topic string, data interface{}, options ...models.GetMQOption) error
+	SendWithContext(ctx context.Context, topic string, data interface{}, options ...models.GetMQOption) error
 
 	// or, pass messages back to client
 	Receive(topic string) (<-chan []byte, error)

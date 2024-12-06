@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/A-pen-app/mq/models"
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 
@@ -64,12 +65,12 @@ func clearExchanges() error {
 	return nil
 }
 
-func (p *Store) SendWithContext(ctx context.Context, topic string, data interface{}, attributes map[string]string) error {
+func (p *Store) SendWithContext(ctx context.Context, topic string, data interface{}, opts ...models.GetMQOption) error {
 	// FIXME propagate context through rabbitmq messages
-	return p.Send(topic, data, attributes)
+	return p.Send(topic, data, opts...)
 }
 
-func (p *Store) Send(exchange string, message interface{}, attributes map[string]string) error {
+func (p *Store) Send(exchange string, message interface{}, opts ...models.GetMQOption) error {
 	switch exchange {
 	case TopicNotif:
 		tries := 0

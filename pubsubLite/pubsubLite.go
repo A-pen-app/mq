@@ -10,6 +10,7 @@ import (
 
 	"cloud.google.com/go/pubsub"
 	"cloud.google.com/go/pubsublite/pscompat"
+	"github.com/A-pen-app/mq/models"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/propagation"
 	semconv "go.opentelemetry.io/otel/semconv/v1.4.0"
@@ -50,7 +51,7 @@ func Initialize(ctx context.Context, config *Config) {
 	c = config
 }
 
-func (ps *Store) SendWithContext(ctx context.Context, topic string, data interface{}, attributes map[string]string) error {
+func (ps *Store) SendWithContext(ctx context.Context, topic string, data interface{}, opts ...models.GetMQOption) error {
 	p := publisher[topic]
 	if p == nil {
 		return errors.New("publisher not found")
@@ -85,7 +86,7 @@ func (ps *Store) SendWithContext(ctx context.Context, topic string, data interfa
 
 }
 
-func (ps *Store) Send(topic string, data interface{}, attributes map[string]string) error {
+func (ps *Store) Send(topic string, data interface{}, opts ...models.GetMQOption) error {
 	p := publisher[topic]
 	if p == nil {
 		return errors.New("publisher not found")

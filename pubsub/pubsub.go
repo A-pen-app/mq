@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"cloud.google.com/go/pubsub"
+	"github.com/A-pen-app/mq/models"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/propagation"
 	semconv "go.opentelemetry.io/otel/semconv/v1.4.0"
@@ -51,11 +52,19 @@ func Initialize(ctx context.Context, config *Config) {
 	client = newClient
 }
 
-func (ps *Store) SendWithContext(ctx context.Context, topic string, data interface{}, attributes map[string]string) error {
+func (ps *Store) SendWithContext(ctx context.Context, topic string, data interface{}, opts ...models.GetMQOption) error {
 	p := publisher[topic]
 	if p == nil {
 		return errors.New("publisher not found")
 	}
+
+	opt := &models.MQOption{}
+	for _, f := range opts {
+		if err := f(opt); err != nil {
+			return err
+		}
+	}
+
 	options := []trace.SpanStartOption{
 		trace.WithSpanKind(trace.SpanKindProducer),
 		trace.WithAttributes(
@@ -74,7 +83,7 @@ func (ps *Store) SendWithContext(ctx context.Context, topic string, data interfa
 
 	msg := pubsub.Message{
 		Data:       payload,
-		Attributes: attributes,
+		Attributes: opt.Attributes,
 	}
 	otel.GetTextMapPropagator().Inject(ctx, propagation.MapCarrier(msg.Attributes))
 
@@ -86,10 +95,17 @@ func (ps *Store) SendWithContext(ctx context.Context, topic string, data interfa
 	return nil
 }
 
-func (ps *Store) Send(topic string, data interface{}, attributes map[string]string) error {
+func (ps *Store) Send(topic string, data interface{}, opts ...models.GetMQOption) error {
 	p := publisher[topic]
 	if p == nil {
 		return errors.New("publisher not found")
+	}
+
+	opt := &models.MQOption{}
+	for _, f := range opts {
+		if err := f(opt); err != nil {
+			return err
+		}
 	}
 
 	// Collect any messages that need to be republished with a new publisher
@@ -108,7 +124,7 @@ func (ps *Store) Send(topic string, data interface{}, attributes map[string]stri
 
 	msg := &pubsub.Message{
 		Data:       payload,
-		Attributes: attributes,
+		Attributes: opt.Attributes,
 	}
 	result := p.Publish(ctx, msg)
 
