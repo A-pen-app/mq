@@ -1,15 +1,13 @@
-package pubsubLite
+package pubsub
 
 import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"sync"
 	"time"
 
 	"cloud.google.com/go/pubsub"
-	"cloud.google.com/go/pubsublite/pscompat"
 	"github.com/A-pen-app/mq/models"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/propagation"
@@ -20,35 +18,38 @@ import (
 
 var (
 	receiveTimeout = 24 * 60 * 60 * time.Second
-	publisher      = make(map[string]*pscompat.PublisherClient)
+	publisher      = make(map[string]*pubsub.Topic)
+	client         *pubsub.Client
 	c              *Config
 )
 
+type TopicConfig struct {
+	SubscriptionID string
+}
+
 type Config struct {
-	ProjectID    string
-	RegionOrZone string
-	Topics       map[string]string
+	ProjectID string
+	Topics    map[string]TopicConfig
 }
 
 type Store struct{}
 
-// FIXME: Reservation, topic, and subscription health check and initialization is to be added in the future.
 func Initialize(ctx context.Context, config *Config) {
 	if config == nil {
 		return
 	}
 
-	for topic := range config.Topics {
-		topicPath := fmt.Sprintf("projects/%s/locations/%s/topics/%s", config.ProjectID, config.RegionOrZone, topic)
+	newClient, err := pubsub.NewClient(ctx, config.ProjectID)
+	if err != nil {
+		return
+	}
 
-		// Create the publisher client.
-		p, err := pscompat.NewPublisherClient(ctx, topicPath)
-		if err != nil {
-			continue
-		}
-		publisher[topic] = p
+	for topic := range config.Topics {
+		t := newClient.Topic(topic)
+		publisher[topic] = t
 	}
 	c = config
+	client = newClient
 }
 
 func (ps *Store) SendWithContext(ctx context.Context, topic string, data interface{}, opts ...models.GetMQOption) error {
@@ -56,6 +57,14 @@ func (ps *Store) SendWithContext(ctx context.Context, topic string, data interfa
 	if p == nil {
 		return errors.New("publisher not found")
 	}
+
+	opt := &models.MQOption{}
+	for _, f := range opts {
+		if err := f(opt); err != nil {
+			return err
+		}
+	}
+
 	options := []trace.SpanStartOption{
 		trace.WithSpanKind(trace.SpanKindProducer),
 		trace.WithAttributes(
@@ -71,9 +80,10 @@ func (ps *Store) SendWithContext(ctx context.Context, topic string, data interfa
 	if err != nil {
 		return err
 	}
+
 	msg := pubsub.Message{
 		Data:       payload,
-		Attributes: make(map[string]string),
+		Attributes: opt.Attributes,
 	}
 	otel.GetTextMapPropagator().Inject(ctx, propagation.MapCarrier(msg.Attributes))
 
@@ -83,13 +93,19 @@ func (ps *Store) SendWithContext(ctx context.Context, topic string, data interfa
 	}
 	span.SetAttributes(semconv.MessagingMessageIDKey.String(msgID))
 	return nil
-
 }
 
 func (ps *Store) Send(topic string, data interface{}, opts ...models.GetMQOption) error {
 	p := publisher[topic]
 	if p == nil {
 		return errors.New("publisher not found")
+	}
+
+	opt := &models.MQOption{}
+	for _, f := range opts {
+		if err := f(opt); err != nil {
+			return err
+		}
 	}
 
 	// Collect any messages that need to be republished with a new publisher
@@ -107,14 +123,15 @@ func (ps *Store) Send(topic string, data interface{}, opts ...models.GetMQOption
 	}
 
 	msg := &pubsub.Message{
-		Data: payload,
+		Data:       payload,
+		Attributes: opt.Attributes,
 	}
 	result := p.Publish(ctx, msg)
 
 	// FIXME: Resend mechanism to be added
 	g.Go(func() error {
 		// Get blocks until the result is ready.
-		id, err := result.Get(ctx)
+		_, err := result.Get(ctx)
 		if err != nil {
 			// NOTE: A failed PublishResult indicates that the publisher client
 			// encountered a fatal error and has permanently terminated. After the
@@ -126,21 +143,9 @@ func (ps *Store) Send(topic string, data interface{}, opts ...models.GetMQOption
 			return err
 		}
 
-		// Metadata decoded from the id contains the partition and offset.
-		_, err = pscompat.ParseMessageMetadata(id)
-		if err != nil {
-			fmt.Printf("Failed to parse message metadata %q: %v\n", id, err)
-			return err
-		}
 		return nil
 	})
 	if err := g.Wait(); err != nil {
-		return err
-	}
-
-	// Print the error that caused the publisher client to terminate (if any),
-	// which may contain more context than PublishResults.
-	if err := p.Error(); err != nil {
 		return err
 	}
 
@@ -148,36 +153,33 @@ func (ps *Store) Send(topic string, data interface{}, opts ...models.GetMQOption
 }
 
 func (ps *Store) ReceiveWithContext(ctx context.Context, topic string) (<-chan []byte, error) {
-	subID, exist := c.Topics[topic]
-	if !exist || len(subID) == 0 {
+	tc, exist := c.Topics[topic]
+	if !exist || len(tc.SubscriptionID) == 0 {
 		return nil, errors.New("topic or subscription not found")
 	}
-	subscriptionPath := fmt.Sprintf("projects/%s/locations/%s/subscriptions/%s", c.ProjectID, c.RegionOrZone, subID)
-	settings := pscompat.ReceiveSettings{
+	settings := pubsub.ReceiveSettings{
 		MaxOutstandingBytes:    10 * 1024 * 1024,
 		MaxOutstandingMessages: 1000,
 	}
-	s, err := pscompat.NewSubscriberClientWithSettings(
-		ctx,
-		subscriptionPath,
-		settings,
-	)
-	if err != nil {
-		return nil, err
-	}
+
+	// bind the subscription.
+	sub := client.Subscription(tc.SubscriptionID)
+	sub.ReceiveSettings = settings
+
 	byteCh := make(chan []byte)
 	errCh := make(chan error)
-	go func(ctx context.Context, s *pscompat.SubscriberClient, ch chan []byte, errCh chan error) {
+	go func(ctx context.Context, s *pubsub.Subscription, ch chan []byte, errCh chan error) {
 		if err := s.Receive(ctx, func(ctx context.Context, msg *pubsub.Message) {
 			if msg.Attributes != nil {
 				propagator := otel.GetTextMapPropagator()
 				ctx = propagator.Extract(ctx, propagation.MapCarrier(msg.Attributes))
 			}
+
 			options := []trace.SpanStartOption{
 				trace.WithSpanKind(trace.SpanKindConsumer),
 				trace.WithAttributes(
 					semconv.MessagingSystemKey.String("pubsub"),
-					semconv.MessagingDestinationKey.String(subID),
+					semconv.MessagingDestinationKey.String(tc.SubscriptionID),
 					semconv.MessagingDestinationKindTopic,
 					semconv.MessagingMessageIDKey.String(msg.ID),
 				),
@@ -187,30 +189,27 @@ func (ps *Store) ReceiveWithContext(ctx context.Context, topic string) (<-chan [
 
 			byteCh <- msg.Data
 			msg.Ack()
+
 		}); err != nil {
 			errCh <- err
 		}
-	}(ctx, s, byteCh, errCh)
+	}(ctx, sub, byteCh, errCh)
 
 	return byteCh, nil
-
 }
 
 func (ps *Store) Receive(topic string) (<-chan []byte, error) {
 	ctx := context.Background()
 
-	subID, exist := c.Topics[topic]
-	if !exist || len(subID) == 0 {
+	tc, exist := c.Topics[topic]
+	if !exist || len(tc.SubscriptionID) == 0 {
 		return nil, errors.New("topic or subscription not found")
 	}
 
-	subscriptionPath := fmt.Sprintf("projects/%s/locations/%s/subscriptions/%s", c.ProjectID, c.RegionOrZone, subID)
-
-	// Configure flow control settings. These settings apply per partition.
 	// The message stream is paused based on the maximum size or number of
 	// messages that the subscriber has already received, whichever condition is
 	// met first.
-	settings := pscompat.ReceiveSettings{
+	settings := pubsub.ReceiveSettings{
 		// 10 MiB. Must be greater than the allowed size of the largest message
 		// (1 MiB).
 		MaxOutstandingBytes: 10 * 1024 * 1024,
@@ -218,30 +217,18 @@ func (ps *Store) Receive(topic string) (<-chan []byte, error) {
 		MaxOutstandingMessages: 1000,
 	}
 
-	// Create the subscriber client.
-	s, err := pscompat.NewSubscriberClientWithSettings(
-		ctx,
-		subscriptionPath,
-		settings,
-	)
-	if err != nil {
-		return nil, err
-	}
+	// bind the subscription.
+	sub := client.Subscription(tc.SubscriptionID)
+	sub.ReceiveSettings = settings
 
 	byteCh := make(chan []byte)
 	errCh := make(chan error)
-	go func(ctx context.Context, s *pscompat.SubscriberClient, ch chan []byte, errCh chan error) {
+	go func(ctx context.Context, s *pubsub.Subscription, ch chan []byte, errCh chan error) {
 		for {
 			ctx, cancel := context.WithTimeout(ctx, receiveTimeout)
 
 			// Receive blocks until the context is cancelled or an error occurs.
-			if err = s.Receive(ctx, func(ctx context.Context, msg *pubsub.Message) {
-				// Metadata decoded from the message ID contains the partition and offset.
-				_, err = pscompat.ParseMessageMetadata(msg.ID)
-				if err != nil {
-					errCh <- err
-					return
-				}
+			if err := s.Receive(ctx, func(ctx context.Context, msg *pubsub.Message) {
 				byteCh <- msg.Data
 				msg.Ack()
 			}); err != nil {
@@ -250,9 +237,8 @@ func (ps *Store) Receive(topic string) (<-chan []byte, error) {
 
 			cancel()
 		}
-	}(ctx, s, byteCh, errCh)
+	}(ctx, sub, byteCh, errCh)
 
-	// logging.Info(ctx, fmt.Sprintf("Received %d messages\n", receiveCount))
 	return byteCh, nil
 }
 
@@ -262,4 +248,5 @@ func Finalize() {
 	for _, v := range publisher {
 		v.Stop()
 	}
+	client.Close()
 }
