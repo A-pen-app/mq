@@ -247,4 +247,5 @@ func Finalize() {
 	for _, v := range publisher {
 		v.Stop()
 	}
+	client.Close()
 }
