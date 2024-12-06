@@ -24,7 +24,6 @@ var (
 
 type TopicConfig struct {
 	SubscriptionID string
-	Filter         string
 }
 
 type Config struct {
@@ -146,15 +145,9 @@ func (ps *Store) ReceiveWithContext(ctx context.Context, topic string) (<-chan [
 		MaxOutstandingBytes:    10 * 1024 * 1024,
 		MaxOutstandingMessages: 1000,
 	}
-	subConfig := pubsub.SubscriptionConfig{
-		Topic:  publisher[topic],
-		Filter: tc.Filter,
-	}
 
-	sub, err := client.CreateSubscription(ctx, tc.SubscriptionID, subConfig)
-	if err != nil {
-		return nil, err
-	}
+	// bind the subscription.
+	sub := client.Subscription(tc.SubscriptionID)
 	sub.ReceiveSettings = settings
 
 	byteCh := make(chan []byte)
@@ -208,16 +201,8 @@ func (ps *Store) Receive(topic string) (<-chan []byte, error) {
 		MaxOutstandingMessages: 1000,
 	}
 
-	subConfig := pubsub.SubscriptionConfig{
-		Topic:  publisher[topic],
-		Filter: tc.Filter,
-	}
-
-	// Create the subscription.
-	sub, err := client.CreateSubscription(ctx, tc.SubscriptionID, subConfig)
-	if err != nil {
-		return nil, err
-	}
+	// bind the subscription.
+	sub := client.Subscription(tc.SubscriptionID)
 	sub.ReceiveSettings = settings
 
 	byteCh := make(chan []byte)
@@ -227,7 +212,7 @@ func (ps *Store) Receive(topic string) (<-chan []byte, error) {
 			ctx, cancel := context.WithTimeout(ctx, receiveTimeout)
 
 			// Receive blocks until the context is cancelled or an error occurs.
-			if err = s.Receive(ctx, func(ctx context.Context, msg *pubsub.Message) {
+			if err := s.Receive(ctx, func(ctx context.Context, msg *pubsub.Message) {
 				byteCh <- msg.Data
 				msg.Ack()
 			}); err != nil {
