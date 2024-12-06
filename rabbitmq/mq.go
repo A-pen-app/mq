@@ -64,12 +64,12 @@ func clearExchanges() error {
 	return nil
 }
 
-func (p *Store) SendWithContext(ctx context.Context, topic string, data interface{}) error {
+func (p *Store) SendWithContext(ctx context.Context, topic string, data interface{}, attributes map[string]string) error {
 	// FIXME propagate context through rabbitmq messages
-	return p.Send(topic, data)
+	return p.Send(topic, data, attributes)
 }
 
-func (p *Store) Send(exchange string, message interface{}) error {
+func (p *Store) Send(exchange string, message interface{}, attributes map[string]string) error {
 	switch exchange {
 	case TopicNotif:
 		tries := 0

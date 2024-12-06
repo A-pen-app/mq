@@ -3,14 +3,15 @@ package mq
 import (
 	"context"
 
+	"github.com/A-pen-app/mq/pubsub"
 	"github.com/A-pen-app/mq/pubsubLite"
 	"github.com/A-pen-app/mq/rabbitmq"
 )
 
 type MQ interface {
 	// send some data to a topic
-	Send(topic string, data interface{}) error
-	SendWithContext(ctx context.Context, topic string, data interface{}) error
+	Send(topic string, data interface{}, attributes map[string]string) error
+	SendWithContext(ctx context.Context, topic string, data interface{}, attributes map[string]string) error
 
 	// or, pass messages back to client
 	Receive(topic string) (<-chan []byte, error)
@@ -18,8 +19,9 @@ type MQ interface {
 }
 
 type Config struct {
-	Pubsub   *pubsubLite.Config
-	Rabbitmq *rabbitmq.Config
+	Pubsub    *pubsubLite.Config
+	Rabbitmq  *rabbitmq.Config
+	NewPubsub *pubsub.Config
 }
 
 // Initialize ...
@@ -29,10 +31,15 @@ func Initialize(ctx context.Context, config *Config) {
 	}
 	rabbitmq.Initialize(ctx, config.Rabbitmq)
 	pubsubLite.Initialize(ctx, config.Pubsub)
+	pubsub.Initialize(ctx, config.NewPubsub)
 }
 
 func GetPubsub() MQ {
 	return &pubsubLite.Store{}
+}
+
+func GetNewPubsub() MQ {
+	return &pubsub.Store{}
 }
 
 func GetRabbitmq() MQ {
@@ -43,4 +50,5 @@ func GetRabbitmq() MQ {
 func Finalize() {
 	rabbitmq.Finalize()
 	pubsubLite.Finalize()
+	pubsub.Finalize()
 }
