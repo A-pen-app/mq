@@ -3,10 +3,10 @@ package mq
 import (
 	"context"
 
-	"github.com/A-pen-app/mq/models"
-	"github.com/A-pen-app/mq/pubsub"
-	"github.com/A-pen-app/mq/pubsubLite"
-	"github.com/A-pen-app/mq/rabbitmq"
+	"github.com/A-pen-app/mq/v2/models"
+	"github.com/A-pen-app/mq/v2/pubsub"
+	"github.com/A-pen-app/mq/v2/pubsubLite"
+	"github.com/A-pen-app/mq/v2/rabbitmq"
 )
 
 type MQ interface {

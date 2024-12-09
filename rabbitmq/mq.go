@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/A-pen-app/mq/models"
+	"github.com/A-pen-app/mq/v2/models"
 	amqp "github.com/rabbitmq/amqp091-go"
 )
 

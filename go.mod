@@ -1,4 +1,4 @@
-module github.com/A-pen-app/mq
+module github.com/A-pen-app/mq/v2
 
 go 1.20
 
