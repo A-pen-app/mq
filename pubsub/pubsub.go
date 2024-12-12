@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"sync"
 	"time"
 
@@ -164,6 +165,12 @@ func (ps *Store) ReceiveWithContext(ctx context.Context, topic string) (<-chan [
 
 	// bind the subscription.
 	sub := client.Subscription(tc.SubscriptionID)
+	exists, err := sub.Exists(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("check subscriptionID %s existence failed: %w", tc.SubscriptionID, err)
+	} else if !exists {
+		return nil, fmt.Errorf("subscriptionID %s not found", tc.SubscriptionID)
+	}
 	sub.ReceiveSettings = settings
 
 	byteCh := make(chan []byte)
@@ -219,6 +226,12 @@ func (ps *Store) Receive(topic string) (<-chan []byte, error) {
 
 	// bind the subscription.
 	sub := client.Subscription(tc.SubscriptionID)
+	exists, err := sub.Exists(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("check subscriptionID %s existence failed: %w", tc.SubscriptionID, err)
+	} else if !exists {
+		return nil, fmt.Errorf("subscriptionID %s not found", tc.SubscriptionID)
+	}
 	sub.ReceiveSettings = settings
 
 	byteCh := make(chan []byte)
