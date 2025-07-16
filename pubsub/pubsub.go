@@ -82,9 +82,17 @@ func (ps *Store) SendWithContext(ctx context.Context, topic string, data interfa
 		return err
 	}
 
+	attributes := map[string]string{}
+	if opt.Attributes != nil {
+		attributes = map[string]string{
+			"receiver":               string(opt.Attributes.Receiver),
+			"deployment_environment": string(opt.Attributes.DeploymentEnvironment),
+		}
+	}
+
 	msg := pubsub.Message{
 		Data:       payload,
-		Attributes: opt.Attributes,
+		Attributes: attributes,
 	}
 	otel.GetTextMapPropagator().Inject(ctx, propagation.MapCarrier(msg.Attributes))
 
@@ -123,9 +131,17 @@ func (ps *Store) Send(topic string, data interface{}, opts ...models.GetMQOption
 		return err
 	}
 
+	attributes := map[string]string{}
+	if opt.Attributes != nil {
+		attributes = map[string]string{
+			"receiver":               string(opt.Attributes.Receiver),
+			"deployment_environment": string(opt.Attributes.DeploymentEnvironment),
+		}
+	}
+
 	msg := &pubsub.Message{
 		Data:       payload,
-		Attributes: opt.Attributes,
+		Attributes: attributes,
 	}
 	result := p.Publish(ctx, msg)
 
