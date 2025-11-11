@@ -262,7 +262,7 @@ func (ps *Store) ReceiveWithAck(ctx context.Context, topic string) (<-chan *mode
 					semconv.MessagingMessageIDKey.String(msg.ID),
 				),
 			}
-			_, span := otel.Tracer("subscriber:"+topic).Start(ctx, "pubsub.receivewithcontextandack", options...)
+			_, span := otel.Tracer("subscriber:"+topic).Start(ctx, "pubsub.receivewithack", options...)
 			defer span.End()
 
 			wrappedMsg := &models.Message{
