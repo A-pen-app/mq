@@ -262,6 +262,11 @@ func (p *Store) Receive(topic string) (<-chan []byte, error) {
 	return byteCh, nil
 }
 
+// ReceiveWithContextAndAck is not supported for RabbitMQ
+func (p *Store) ReceiveWithAck(ctx context.Context, topic string) (<-chan *models.Message, <-chan error, error) {
+	return nil, nil, errors.New("ReceiveWithContextAndAck is not supported for RabbitMQ, use ReceiveWithContext instead")
+}
+
 // Finalize ...
 func Finalize() {
 	if client != nil {

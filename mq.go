@@ -14,9 +14,12 @@ type MQ interface {
 	Send(topic string, data interface{}, options ...models.GetMQOption) error
 	SendWithContext(ctx context.Context, topic string, data interface{}, options ...models.GetMQOption) error
 
-	// or, pass messages back to client
+	// or, pass messages back to client (auto-ack)
 	Receive(topic string) (<-chan []byte, error)
 	ReceiveWithContext(ctx context.Context, topic string) (<-chan []byte, error)
+
+	// receive messages with manual Ack/Nack control
+	ReceiveWithAck(ctx context.Context, topic string) (<-chan *models.Message, <-chan error, error)
 }
 
 type Config struct {

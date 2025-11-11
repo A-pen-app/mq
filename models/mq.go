@@ -34,3 +34,21 @@ func WithAttributes(attributes *Attributes) GetMQOption {
 		return nil
 	}
 }
+
+type Message struct {
+	Data     []byte
+	AckFunc  func()
+	NackFunc func()
+}
+
+func (m *Message) Ack() {
+	if m.AckFunc != nil {
+		m.AckFunc()
+	}
+}
+
+func (m *Message) Nack() {
+	if m.NackFunc != nil {
+		m.NackFunc()
+	}
+}
