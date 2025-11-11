@@ -221,7 +221,7 @@ func (ps *Store) ReceiveWithContext(ctx context.Context, topic string) (<-chan [
 	return byteCh, nil
 }
 
-// ReceiveWithContextAndAck receives messages with manual Ack/Nack control
+// ReceiveWithAck receives messages with manual Ack/Nack control
 func (ps *Store) ReceiveWithAck(ctx context.Context, topic string) (<-chan *models.Message, <-chan error, error) {
 	tc, exist := c.Topics[topic]
 	if !exist || len(tc.SubscriptionID) == 0 {
