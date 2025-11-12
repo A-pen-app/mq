@@ -260,7 +260,6 @@ func (ps *Store) Receive(topic string) (<-chan []byte, error) {
 func (ps *Store) ReceiveWithAck(ctx context.Context, topic string) (<-chan *models.Message, <-chan error, error) {
 	return nil, nil, errors.New("ReceiveWithAck is not supported for Pub/Sub Lite, use ReceiveWithContext instead")
 }
-}
 
 // Finalize ...
 func Finalize() {
