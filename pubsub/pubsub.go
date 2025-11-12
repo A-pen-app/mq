@@ -221,6 +221,65 @@ func (ps *Store) ReceiveWithContext(ctx context.Context, topic string) (<-chan [
 	return byteCh, nil
 }
 
+// ReceiveWithAck receives messages with manual Ack/Nack control
+func (ps *Store) ReceiveWithAck(ctx context.Context, topic string) (<-chan *models.Message, <-chan error, error) {
+	tc, exist := c.Topics[topic]
+	if !exist || len(tc.SubscriptionID) == 0 {
+		return nil, nil, errors.New("topic or subscription not found")
+	}
+	settings := pubsub.ReceiveSettings{
+		MaxOutstandingBytes:    10 * 1024 * 1024,
+		MaxOutstandingMessages: 1000,
+	}
+
+	// bind the subscription.
+	sub := client.Subscription(tc.SubscriptionID)
+	exists, err := sub.Exists(ctx)
+	if err != nil {
+		return nil, nil, fmt.Errorf("check subscriptionID %s existence failed: %w", tc.SubscriptionID, err)
+	} else if !exists {
+		return nil, nil, fmt.Errorf("subscriptionID %s not found", tc.SubscriptionID)
+	}
+	sub.ReceiveSettings = settings
+
+	msgCh := make(chan *models.Message)
+	errCh := make(chan error)
+	go func(ctx context.Context, s *pubsub.Subscription, ch chan *models.Message, errCh chan error) {
+		defer close(ch)
+		defer close(errCh)
+		if err := s.Receive(ctx, func(ctx context.Context, msg *pubsub.Message) {
+			if msg.Attributes != nil {
+				propagator := otel.GetTextMapPropagator()
+				ctx = propagator.Extract(ctx, propagation.MapCarrier(msg.Attributes))
+			}
+
+			options := []trace.SpanStartOption{
+				trace.WithSpanKind(trace.SpanKindConsumer),
+				trace.WithAttributes(
+					semconv.MessagingSystemKey.String("pubsub"),
+					semconv.MessagingDestinationKey.String(tc.SubscriptionID),
+					semconv.MessagingDestinationKindTopic,
+					semconv.MessagingMessageIDKey.String(msg.ID),
+				),
+			}
+			_, span := otel.Tracer("subscriber:"+topic).Start(ctx, "pubsub.receivewithack", options...)
+			defer span.End()
+
+			wrappedMsg := &models.Message{
+				Data:     msg.Data,
+				AckFunc:  func() { msg.Ack() },
+				NackFunc: func() { msg.Nack() },
+			}
+			ch <- wrappedMsg
+
+		}); err != nil {
+			errCh <- err
+		}
+	}(ctx, sub, msgCh, errCh)
+
+	return msgCh, errCh, nil
+}
+
 func (ps *Store) Receive(topic string) (<-chan []byte, error) {
 	ctx := context.Background()
 
