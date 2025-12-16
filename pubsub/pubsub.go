@@ -230,6 +230,7 @@ func (ps *Store) ReceiveWithAck(ctx context.Context, topic string) (<-chan *mode
 	settings := pubsub.ReceiveSettings{
 		MaxOutstandingBytes:    10 * 1024 * 1024,
 		MaxOutstandingMessages: 1000,
+		NumGoroutines:          100,
 	}
 
 	// bind the subscription.
