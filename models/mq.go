@@ -16,6 +16,7 @@ const (
 	ReceiverTypeMegaphone ReceiverType = "megaphone"
 	ReceiverTypeShop      ReceiverType = "shop"
 	ReceiverTypeDelibird  ReceiverType = "delibird"
+	ReceiverTypeMeetup    ReceiverType = "meetup"
 )
 
 type MQOption struct {
