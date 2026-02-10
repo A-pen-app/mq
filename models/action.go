@@ -34,6 +34,7 @@ const (
 type SvcActionType string
 
 const (
+	SvcKeyMegaphoneClear          SvcActionType = "megaphone_clear"
 	SvcKeyFormRead                SvcActionType = "form_read"
 	SvcKeyFormCompleted           SvcActionType = "form_completed"
 	SvcKeyInvitationNewUserPassed SvcActionType = "invitation_new_user_passed"
