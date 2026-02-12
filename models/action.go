@@ -49,3 +49,18 @@ type Reward struct {
 	Currency string `json:"currency"`
 	Quantity string `json:"quantity"`
 }
+
+type ConsumeType string
+
+const (
+	AttendMeetup ConsumeType = "attend_meetup"
+)
+
+type ConsumeEvent struct {
+	AppID       string      `json:"app_id" binding:"required"`
+	AppUserID   string      `json:"app_user_id" binding:"required"`
+	ConsumeType ConsumeType `json:"consume_type" binding:"required"`
+	ParamId     *string     `json:"param_id"`
+	Awards      int         `json:"awards"`
+	Coins       int         `json:"coins"`
+}
