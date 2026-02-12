@@ -19,17 +19,15 @@ const (
 	ReceiverTypeMeetup    ReceiverType = "meetup"
 )
 
-type Topic string
-
 const (
-	TopicSvcAction            Topic = "svc-action"
-	TopicAction               Topic = "action"
-	TopicWandererDev          Topic = "wanderer-dev"
-	TopicWandererProd         Topic = "wanderer-prod"
-	TopicStickiness           Topic = "stickiness"
-	TopicNotificationSegments Topic = "notification-segments"
-	TopicMail                 Topic = "mail"
-	TopicNotif                Topic = "notif"
+	TopicSvcAction            string = "svc-action"
+	TopicAction               string = "action"
+	TopicWandererDev          string = "wanderer-dev"
+	TopicWandererProd         string = "wanderer-prod"
+	TopicStickiness           string = "stickiness"
+	TopicNotificationSegments string = "notification-segments"
+	TopicMail                 string = "mail"
+	TopicNotif                string = "notif"
 )
 
 type MQOption struct {
