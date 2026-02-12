@@ -28,6 +28,7 @@ const (
 	TopicNotificationSegments string = "notification-segments"
 	TopicMail                 string = "mail"
 	TopicNotif                string = "notif"
+	TopicConsume              string = "consume"
 )
 
 type MQOption struct {
