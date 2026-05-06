@@ -34,15 +34,17 @@ const (
 type SvcActionType string
 
 const (
-	SvcKeyMegaphoneClear          SvcActionType = "megaphone_clear"
-	SvcKeyFormRead                SvcActionType = "form_read"
-	SvcKeyFormCompleted           SvcActionType = "form_completed"
-	SvcKeyInvitationNewUserPassed SvcActionType = "invitation_new_user_passed"
-	SvcKeyInvitationNewUserUsed   SvcActionType = "invitation_new_user_used"
-	SvcKeyMissionCompleted        SvcActionType = "mission_completed"
-	SvcKeyUserProductUpdated      SvcActionType = "user_product_updated"
-	SvcKeyHireOnceProductConsumed SvcActionType = "hire_once_product_consumed"
-	SvcKeyUserDeleted             SvcActionType = "user_deleted"
+	SvcKeyMegaphoneClear             SvcActionType = "megaphone_clear"
+	SvcKeyFormRead                   SvcActionType = "form_read"
+	SvcKeyFormCompleted              SvcActionType = "form_completed"
+	SvcKeyInvitationNewUserPassed    SvcActionType = "invitation_new_user_passed"
+	SvcKeyInvitationNewUserUsed      SvcActionType = "invitation_new_user_used"
+	SvcKeyMissionCompleted           SvcActionType = "mission_completed"
+	SvcKeyUserProductUpdated         SvcActionType = "user_product_updated"
+	SvcKeyHireOnceProductConsumed    SvcActionType = "hire_once_product_consumed"
+	SvcKeyUserDeleted                SvcActionType = "user_deleted"
+	SvcKeySubscriptionPauseWarning   SvcActionType = "subscription_pause_warning"
+	SvcKeySubscriptionAutoResumed    SvcActionType = "subscription_auto_resumed"
 )
 
 type Reward struct {
