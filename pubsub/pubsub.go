@@ -26,6 +26,7 @@ var (
 
 type TopicConfig struct {
 	SubscriptionID string
+	ProjectID      string // Optional: override default project for cross-project subscriptions
 }
 
 type Config struct {
@@ -51,6 +52,14 @@ func Initialize(ctx context.Context, config *Config) {
 	}
 	c = config
 	client = newClient
+}
+
+// getSubscription returns a subscription handle, using SubscriptionInProject if ProjectID is set
+func getSubscription(tc TopicConfig) *pubsub.Subscription {
+	if tc.ProjectID != "" {
+		return client.SubscriptionInProject(tc.SubscriptionID, tc.ProjectID)
+	}
+	return client.Subscription(tc.SubscriptionID)
 }
 
 func (ps *Store) SendWithContext(ctx context.Context, topic string, data interface{}, opts ...models.GetMQOption) error {
@@ -180,7 +189,7 @@ func (ps *Store) ReceiveWithContext(ctx context.Context, topic string) (<-chan [
 	}
 
 	// bind the subscription.
-	sub := client.Subscription(tc.SubscriptionID)
+	sub := getSubscription(tc)
 	exists, err := sub.Exists(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("check subscriptionID %s existence failed: %w", tc.SubscriptionID, err)
@@ -234,7 +243,7 @@ func (ps *Store) ReceiveWithAck(ctx context.Context, topic string) (<-chan *mode
 	}
 
 	// bind the subscription.
-	sub := client.Subscription(tc.SubscriptionID)
+	sub := getSubscription(tc)
 	exists, err := sub.Exists(ctx)
 	if err != nil {
 		return nil, nil, fmt.Errorf("check subscriptionID %s existence failed: %w", tc.SubscriptionID, err)
@@ -301,7 +310,7 @@ func (ps *Store) Receive(topic string) (<-chan []byte, error) {
 	}
 
 	// bind the subscription.
-	sub := client.Subscription(tc.SubscriptionID)
+	sub := getSubscription(tc)
 	exists, err := sub.Exists(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("check subscriptionID %s existence failed: %w", tc.SubscriptionID, err)
