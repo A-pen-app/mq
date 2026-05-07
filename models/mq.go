@@ -29,6 +29,7 @@ const (
 	TopicMail                 string = "mail"
 	TopicNotif                string = "notif"
 	TopicConsume              string = "consume"
+	TopicPlayStoreRTDN        string = "play-store-rtdn"
 )
 
 type MQOption struct {
