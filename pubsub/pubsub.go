@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"sync"
 	"time"
 
@@ -275,12 +276,32 @@ func (ps *Store) ReceiveWithAck(ctx context.Context, topic string) (<-chan *mode
 			_, span := otel.Tracer("subscriber:"+topic).Start(ctx, "pubsub.receivewithack", options...)
 			defer span.End()
 
+			done := make(chan struct{})
+			once := sync.Once{}
+			closeDone := func() { once.Do(func() { close(done) }) }
+
+			log.Printf("[mq] received id=%s", msg.ID)
 			wrappedMsg := &models.Message{
-				Data:     msg.Data,
-				AckFunc:  func() { msg.Ack() },
-				NackFunc: func() { msg.Nack() },
+				Data: msg.Data,
+				AckFunc: func() {
+					log.Printf("[mq] ack id=%s", msg.ID)
+					msg.Ack()
+					closeDone()
+				},
+				NackFunc: func() {
+					log.Printf("[mq] nack id=%s", msg.ID)
+					msg.Nack()
+					closeDone()
+				},
 			}
 			ch <- wrappedMsg
+
+			select {
+			case <-done:
+			case <-ctx.Done():
+				log.Printf("[mq] ctx done, nack id=%s", msg.ID)
+				msg.Nack()
+			}
 
 		}); err != nil {
 			errCh <- err
