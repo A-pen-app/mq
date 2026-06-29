@@ -278,26 +278,36 @@ func (ps *Store) ReceiveWithAck(ctx context.Context, topic string) (<-chan *mode
 
 			done := make(chan struct{})
 			once := sync.Once{}
-			closeDone := func() { once.Do(func() { close(done) }) }
+			var shouldNack bool
+			// AckFunc/NackFunc only record the consumer's intent and unblock the
+			// callback. The actual Ack/Nack is executed below on THIS callback
+			// goroutine (the one the Pub/Sub client invoked to deliver the
+			// message), so the ack is bound to the stream that delivered it
+			// rather than being issued from the consumer's goroutine.
+			settle := func(nack bool) {
+				once.Do(func() {
+					shouldNack = nack
+					close(done)
+				})
+			}
 
 			log.Printf("[mq] received id=%s", msg.ID)
 			wrappedMsg := &models.Message{
-				Data: msg.Data,
-				AckFunc: func() {
-					log.Printf("[mq] ack id=%s", msg.ID)
-					msg.Ack()
-					closeDone()
-				},
-				NackFunc: func() {
-					log.Printf("[mq] nack id=%s", msg.ID)
-					msg.Nack()
-					closeDone()
-				},
+				Data:     msg.Data,
+				AckFunc:  func() { settle(false) },
+				NackFunc: func() { settle(true) },
 			}
 			ch <- wrappedMsg
 
 			select {
 			case <-done:
+				if shouldNack {
+					log.Printf("[mq] nack id=%s", msg.ID)
+					msg.Nack()
+				} else {
+					log.Printf("[mq] ack id=%s", msg.ID)
+					msg.Ack()
+				}
 			case <-ctx.Done():
 				log.Printf("[mq] ctx done, nack id=%s", msg.ID)
 				msg.Nack()
