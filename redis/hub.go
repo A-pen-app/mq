@@ -1,12 +1,9 @@
 // Package redis fans events out to long-lived connections held by this pod, and
-// carries them between pods over Redis pub/sub. It knows nothing about what the
-// events mean.
+// carries them between pods over Redis pub/sub.
 //
-// Unlike its siblings, this package does not implement MQ. pubsub, pubsubLite
-// and rabbitmq are work queues -- one message goes to one consumer. This is a
-// broadcast: every pod receives every event, and an event nobody is subscribed
-// to is dropped. Those semantics are opposites, so the MQ interface would
-// mislead rather than describe.
+// It deliberately does not implement MQ: the other drivers are work queues (one
+// message, one consumer), this is a broadcast (every pod, dropped if nobody is
+// listening). Swapping one for the other compiles and then misbehaves.
 package redis
 
 import "sync"

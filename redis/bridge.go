@@ -29,9 +29,7 @@ type bridge[T Keyed] struct {
 	onError func(ctx context.Context, err error)
 }
 
-// Run consumes the subscription until ctx is cancelled. One per pod. A payload
-// that fails to decode is logged and skipped -- one bad publisher must not take
-// down delivery for everyone.
+// Run consumes the subscription until ctx is cancelled. One per pod.
 func (b *bridge[T]) Run(ctx context.Context) {
 	messages := b.sub.Subscribe(ctx, b.channel)
 

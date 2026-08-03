@@ -17,28 +17,55 @@ type Service[T Keyed] interface {
 	Run(ctx context.Context)
 }
 
+// Only the connection is module state. A Hub belongs to one event type, so it
+// stays with the app.
+var client *goredis.Client
+
 type Config struct {
-	Addr    string
+	Addr string
+}
+
+// Initialize opens the connection; a nil config means the app does not use
+// Redis. Separate from any cache pool by necessity -- SUBSCRIBE occupies a
+// connection for as long as it is open.
+func Initialize(ctx context.Context, c *Config) {
+	if c == nil {
+		return
+	}
+	client = goredis.NewClient(&goredis.Options{Addr: c.Addr})
+}
+
+func Finalize() {
+	if client != nil {
+		client.Close()
+		client = nil
+	}
+}
+
+// Options is per-Service: one process may broadcast several event types, each
+// on its own channel.
+type Options struct {
 	Channel string
-	// OnError receives errors from the subscription loop. A payload that fails
-	// to decode is reported here and skipped -- one bad publisher must not take
-	// down delivery for everyone. Nil ignores them.
+	// OnError reports a payload that failed to decode, which Run then skips --
+	// one bad publisher must not stall delivery for everyone. Nil ignores them.
 	OnError func(ctx context.Context, err error)
 }
 
-// New connects a bridge to Redis pub/sub on the configured channel.
-//
-// A separate client from any cache pool by necessity: SUBSCRIBE occupies a
-// connection for as long as it is open.
-func New[T Keyed](hub *Hub[T], cfg Config) Service[T] {
-	client := &goRedis{rdb: goredis.NewClient(&goredis.Options{Addr: cfg.Addr})}
+// New connects a bridge to Redis pub/sub on the configured channel. Panics when
+// Initialize has not run, rather than silently degrading to single-pod delivery.
+func New[T Keyed](hub *Hub[T], opts Options) Service[T] {
+	if client == nil {
+		panic("mq/redis: New called before Initialize")
+	}
+
+	adapter := &goRedis{rdb: client}
 
 	return &bridge[T]{
 		hub:     hub,
-		client:  client,
-		sub:     client,
-		channel: cfg.Channel,
-		onError: cfg.OnError,
+		client:  adapter,
+		sub:     adapter,
+		channel: opts.Channel,
+		onError: opts.OnError,
 	}
 }
 

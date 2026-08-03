@@ -7,6 +7,7 @@ import (
 	"github.com/A-pen-app/mq/v2/pubsub"
 	"github.com/A-pen-app/mq/v2/pubsubLite"
 	"github.com/A-pen-app/mq/v2/rabbitmq"
+	"github.com/A-pen-app/mq/v2/redis"
 )
 
 type MQ interface {
@@ -26,6 +27,7 @@ type Config struct {
 	Pubsub    *pubsubLite.Config
 	Rabbitmq  *rabbitmq.Config
 	NewPubsub *pubsub.Config
+	Redis     *redis.Config
 }
 
 // Initialize ...
@@ -36,6 +38,7 @@ func Initialize(ctx context.Context, config *Config) {
 	rabbitmq.Initialize(ctx, config.Rabbitmq)
 	pubsubLite.Initialize(ctx, config.Pubsub)
 	pubsub.Initialize(ctx, config.NewPubsub)
+	redis.Initialize(ctx, config.Redis)
 }
 
 func GetPubsub() MQ {
@@ -55,4 +58,5 @@ func Finalize() {
 	rabbitmq.Finalize()
 	pubsubLite.Finalize()
 	pubsub.Finalize()
+	redis.Finalize()
 }
