@@ -158,6 +158,64 @@ func TestBridgeRunStopsOnContextCancel(t *testing.T) {
 	}
 }
 
+// Losing the subscription while still running means this pod stops seeing every
+// other pod's events -- silently, since the connections stay open and nothing
+// crashes. It has to be reported.
+func TestBridgeRunReportsUnexpectedSubscriptionClose(t *testing.T) {
+	messages := make(chan string)
+	reported := make(chan error, 1)
+
+	b := &bridge[testEvent]{
+		hub:     NewHub[testEvent](),
+		sub:     &fakeRedisSubscriber{messages: messages},
+		channel: "test:events",
+		onError: func(ctx context.Context, err error) { reported <- err },
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	go b.Run(ctx)
+
+	close(messages)
+
+	select {
+	case err := <-reported:
+		if err == nil {
+			t.Fatal("onError got a nil error")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("Run exited without reporting the lost subscription")
+	}
+}
+
+// Shutdown closes the subscription too, but that one is expected -- reporting it
+// would page someone every deploy.
+func TestBridgeRunStaysQuietWhenCancelled(t *testing.T) {
+	messages := make(chan string)
+	reported := make(chan error, 1)
+
+	b := &bridge[testEvent]{
+		hub:     NewHub[testEvent](),
+		sub:     &fakeRedisSubscriber{messages: messages},
+		channel: "test:events",
+		onError: func(ctx context.Context, err error) { reported <- err },
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	stopped := make(chan struct{})
+	go func() { defer close(stopped); b.Run(ctx) }()
+
+	cancel()
+	close(messages)
+
+	<-stopped
+	select {
+	case err := <-reported:
+		t.Fatalf("cancellation reported an error: %v", err)
+	default:
+	}
+}
+
 // A payload that fails to decode has to reach the caller. Swallowing it would
 // leave cross-pod delivery broken with nothing to show for it.
 func TestBridgeRunReportsMalformedPayload(t *testing.T) {

@@ -3,6 +3,7 @@ package redis
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	goredis "github.com/redis/go-redis/v9"
@@ -38,7 +39,12 @@ func (b *bridge[T]) Run(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case msg, ok := <-messages:
+			// Only unexpected when ctx is still live: losing the subscription
+			// then means this pod silently stops seeing other pods' events.
 			if !ok {
+				if ctx.Err() == nil && b.onError != nil {
+					b.onError(ctx, errors.New("subscription closed"))
+				}
 				return
 			}
 			if err := b.dispatch([]byte(msg)); err != nil && b.onError != nil {
