@@ -35,8 +35,8 @@ func TestInitializeIgnoresNilConfig(t *testing.T) {
 	}
 }
 
-// Failing at startup beats silently degrading to single-pod delivery in
-// production, where the symptom would be "some users don't see new messages".
+// Failing at startup beats silently degrading to single-pod delivery, where the
+// symptom would be "some users don't see new messages".
 func TestNewPanicsWithoutInitialize(t *testing.T) {
 	t.Cleanup(Finalize)
 	Finalize()
@@ -48,6 +48,53 @@ func TestNewPanicsWithoutInitialize(t *testing.T) {
 	}()
 
 	New(NewHub[testEvent](), Options{Channel: "test:events"})
+}
+
+func TestLocalDeliversToTheHub(t *testing.T) {
+	hub := NewHub[testEvent]()
+	events, unsubscribe := hub.Subscribe("room-1")
+	defer unsubscribe()
+
+	if err := NewLocal(hub).Publish(context.Background(), testEvent{Room: "room-1"}); err != nil {
+		t.Fatalf("Publish: %v", err)
+	}
+
+	select {
+	case <-events:
+	default:
+		t.Fatal("the in-process variant did not deliver to the hub")
+	}
+}
+
+// Finalize closes the client, which closes the subscription. That is shutdown,
+// not failure -- and the caller's context is no help, because Finalize runs
+// before it is cancelled.
+func TestRunStaysQuietWhenFinalizeClosesTheSubscription(t *testing.T) {
+	t.Cleanup(Finalize)
+	Initialize(context.Background(), &Config{Addr: "127.0.0.1:6379"})
+
+	messages := make(chan string)
+	reported := make(chan error, 1)
+	b := &bridge[testEvent]{
+		hub:      NewHub[testEvent](),
+		sub:      &fakeRedisSubscriber{messages: messages},
+		channel:  "test:events",
+		onError:  func(ctx context.Context, err error) { reported <- err },
+		shutdown: shutdown,
+	}
+
+	stopped := make(chan struct{})
+	go func() { defer close(stopped); b.Run(context.Background()) }()
+
+	Finalize()
+	close(messages)
+
+	<-stopped
+	select {
+	case err := <-reported:
+		t.Fatalf("shutdown reported an error: %v", err)
+	default:
+	}
 }
 
 func TestNewUsesTheInitializedClient(t *testing.T) {
