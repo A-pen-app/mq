@@ -3,6 +3,7 @@ package redis
 import (
 	"context"
 	"testing"
+	"time"
 )
 
 // The connection is module state, so every test here restores it rather than
@@ -35,19 +36,60 @@ func TestInitializeIgnoresNilConfig(t *testing.T) {
 	}
 }
 
-// Failing at startup beats silently degrading to single-pod delivery, where the
-// symptom would be "some users don't see new messages".
-func TestNewPanicsWithoutInitialize(t *testing.T) {
+// The bug this branch fixes: apps register routes from package init(), which runs
+// before main() calls Initialize, so New must not need a connection yet.
+func TestNewBeforeInitializeDoesNotPanic(t *testing.T) {
 	t.Cleanup(Finalize)
 	Finalize()
 
-	defer func() {
-		if recover() == nil {
-			t.Fatal("New did not panic without Initialize")
-		}
+	svc := New(NewHub[testEvent](), Options{Channel: "test:events"})
+
+	if _, ok := svc.(*bridge[testEvent]); !ok {
+		t.Fatalf("New returned %T, want *bridge[testEvent]", svc)
+	}
+}
+
+func TestPublishBeforeInitializeReturnsError(t *testing.T) {
+	t.Cleanup(Finalize)
+	Finalize()
+
+	err := New(NewHub[testEvent](), Options{Channel: "test:events"}).
+		Publish(context.Background(), testEvent{Room: "room-1"})
+
+	if err == nil {
+		t.Fatal("Publish succeeded without a connection")
+	}
+}
+
+// Run is started once per pod and must survive being started first; giving up
+// would leave that pod blind to every other pod's events.
+func TestRunWaitsForInitialize(t *testing.T) {
+	t.Cleanup(Finalize)
+	Finalize()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+
+	stopped := make(chan struct{})
+	go func() {
+		defer close(stopped)
+		New(NewHub[testEvent](), Options{Channel: "test:events"}).Run(ctx)
 	}()
 
-	New(NewHub[testEvent](), Options{Channel: "test:events"})
+	select {
+	case <-stopped:
+		t.Fatal("Run gave up instead of waiting for Initialize")
+	case <-time.After(100 * time.Millisecond):
+	}
+
+	Initialize(context.Background(), &Config{Addr: "127.0.0.1:6379"})
+	cancel()
+
+	select {
+	case <-stopped:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Run never proceeded after Initialize")
+	}
 }
 
 func TestLocalDeliversToTheHub(t *testing.T) {
@@ -97,21 +139,24 @@ func TestRunStaysQuietWhenFinalizeClosesTheSubscription(t *testing.T) {
 	}
 }
 
-func TestNewUsesTheInitializedClient(t *testing.T) {
+func TestNewResolvesTheModuleClient(t *testing.T) {
 	t.Cleanup(Finalize)
-
 	Initialize(context.Background(), &Config{Addr: "127.0.0.1:6379"})
 
-	svc := New(NewHub[testEvent](), Options{Channel: "test:events"})
-	b, ok := svc.(*bridge[testEvent])
+	b, ok := New(NewHub[testEvent](), Options{Channel: "test:events"}).(*bridge[testEvent])
 	if !ok {
-		t.Fatalf("New returned %T, want *bridge[testEvent]", svc)
+		t.Fatal("New did not return a bridge")
 	}
 	if b.channel != "test:events" {
 		t.Errorf("channel = %q, want %q", b.channel, "test:events")
 	}
-	if b.client.(*goRedis).rdb != client {
-		t.Error("New built its own client instead of using the initialized one")
+
+	pub, err := b.publisher()
+	if err != nil {
+		t.Fatalf("publisher: %v", err)
+	}
+	if pub.(*goRedis).rdb != client {
+		t.Error("the bridge built its own client instead of using the initialized one")
 	}
 }
 

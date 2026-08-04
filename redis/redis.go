@@ -2,6 +2,7 @@ package redis
 
 import (
 	"context"
+	"sync"
 
 	goredis "github.com/redis/go-redis/v9"
 )
@@ -19,14 +20,29 @@ type Service[T Keyed] interface {
 
 // Only the connection is module state -- a Hub belongs to one event type, so it
 // stays with the app.
+//
+// Guarded, because New and Run can run before Initialize: apps register routes
+// from package init(), which is ahead of main().
 var (
+	mu     sync.RWMutex
 	client *goredis.Client
 	// shutdown is closed by Finalize. Closing the client closes every running
 	// subscription, and Run has no other way to tell that apart from losing its
 	// subscription for real -- Finalize runs before the caller's context is
 	// cancelled.
 	shutdown chan struct{}
+	// ready is closed by Initialize, so a Run that started first can wait for the
+	// connection instead of failing. Finalize replaces it with an open one.
+	ready = make(chan struct{})
 )
+
+// connection reports the current state. A nil client means Initialize has not
+// run, or Finalize already released it.
+func connection() (*goredis.Client, <-chan struct{}, <-chan struct{}) {
+	mu.RLock()
+	defer mu.RUnlock()
+	return client, shutdown, ready
+}
 
 type Config struct {
 	Addr string
@@ -42,16 +58,22 @@ func Initialize(ctx context.Context, c *Config) {
 	// bridges built against it would never learn that they were told to stop.
 	Finalize()
 
+	mu.Lock()
+	defer mu.Unlock()
 	client = goredis.NewClient(&goredis.Options{Addr: c.Addr})
 	shutdown = make(chan struct{})
+	close(ready)
 }
 
 func Finalize() {
+	mu.Lock()
+	defer mu.Unlock()
 	if client != nil {
 		close(shutdown)
 		client.Close()
 		client = nil
 		shutdown = nil
+		ready = make(chan struct{})
 	}
 }
 
@@ -63,22 +85,14 @@ type Options struct {
 	OnError func(ctx context.Context, err error)
 }
 
-// New connects a bridge to Redis pub/sub. Panics when Initialize has not run,
-// rather than silently degrading to single-pod delivery.
+// New connects a bridge to Redis pub/sub. The connection is resolved when the
+// bridge is used, not here -- New may run during package init, before main has
+// called Initialize.
 func New[T Keyed](hub *Hub[T], opts Options) Service[T] {
-	if client == nil {
-		panic("mq/redis: New called before Initialize")
-	}
-
-	adapter := &goRedis{rdb: client}
-
 	return &bridge[T]{
-		hub:      hub,
-		client:   adapter,
-		sub:      adapter,
-		channel:  opts.Channel,
-		onError:  opts.OnError,
-		shutdown: shutdown,
+		hub:     hub,
+		channel: opts.Channel,
+		onError: opts.OnError,
 	}
 }
 
