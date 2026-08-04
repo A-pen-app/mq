@@ -38,6 +38,10 @@ func Initialize(ctx context.Context, c *Config) {
 	if c == nil {
 		return
 	}
+	// A second Initialize would otherwise strand the first shutdown channel, and
+	// bridges built against it would never learn that they were told to stop.
+	Finalize()
+
 	client = goredis.NewClient(&goredis.Options{Addr: c.Addr})
 	shutdown = make(chan struct{})
 }

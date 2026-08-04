@@ -114,3 +114,21 @@ func TestNewUsesTheInitializedClient(t *testing.T) {
 		t.Error("New built its own client instead of using the initialized one")
 	}
 }
+
+func TestInitializeTwiceClosesTheFirstShutdown(t *testing.T) {
+	t.Cleanup(Finalize)
+
+	Initialize(context.Background(), &Config{Addr: "127.0.0.1:6379"})
+	first := shutdown
+
+	Initialize(context.Background(), &Config{Addr: "127.0.0.1:6380"})
+
+	select {
+	case <-first:
+	default:
+		t.Fatal("the first shutdown channel stayed open -- bridges holding it would never stop quietly")
+	}
+	if shutdown == first {
+		t.Fatal("Initialize reused the closed channel")
+	}
+}
