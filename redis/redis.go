@@ -17,42 +17,54 @@ type Service[T Keyed] interface {
 	Run(ctx context.Context)
 }
 
-// Only the connection is module state. A Hub belongs to one event type, so it
+// Only the connection is module state -- a Hub belongs to one event type, so it
 // stays with the app.
-var client *goredis.Client
+var (
+	client *goredis.Client
+	// shutdown is closed by Finalize. Closing the client closes every running
+	// subscription, and Run has no other way to tell that apart from losing its
+	// subscription for real -- Finalize runs before the caller's context is
+	// cancelled.
+	shutdown chan struct{}
+)
 
 type Config struct {
 	Addr string
 }
 
-// Initialize opens the connection; a nil config means the app does not use
-// Redis. Separate from any cache pool by necessity -- SUBSCRIBE occupies a
-// connection for as long as it is open.
+// Initialize opens the connection; nil means the app does not use Redis.
+// Separate from any cache pool by necessity: SUBSCRIBE occupies a connection.
 func Initialize(ctx context.Context, c *Config) {
 	if c == nil {
 		return
 	}
+	// A second Initialize would otherwise strand the first shutdown channel, and
+	// bridges built against it would never learn that they were told to stop.
+	Finalize()
+
 	client = goredis.NewClient(&goredis.Options{Addr: c.Addr})
+	shutdown = make(chan struct{})
 }
 
 func Finalize() {
 	if client != nil {
+		close(shutdown)
 		client.Close()
 		client = nil
+		shutdown = nil
 	}
 }
 
-// Options is per-Service: one process may broadcast several event types, each
-// on its own channel.
+// Options is per-Service -- one process may broadcast several event types.
 type Options struct {
 	Channel string
-	// OnError reports a payload that failed to decode, which Run then skips --
-	// one bad publisher must not stall delivery for everyone. Nil ignores them.
+	// OnError reports a payload Run failed to decode and then skipped. Nil
+	// ignores them.
 	OnError func(ctx context.Context, err error)
 }
 
-// New connects a bridge to Redis pub/sub on the configured channel. Panics when
-// Initialize has not run, rather than silently degrading to single-pod delivery.
+// New connects a bridge to Redis pub/sub. Panics when Initialize has not run,
+// rather than silently degrading to single-pod delivery.
 func New[T Keyed](hub *Hub[T], opts Options) Service[T] {
 	if client == nil {
 		panic("mq/redis: New called before Initialize")
@@ -61,16 +73,17 @@ func New[T Keyed](hub *Hub[T], opts Options) Service[T] {
 	adapter := &goRedis{rdb: client}
 
 	return &bridge[T]{
-		hub:     hub,
-		client:  adapter,
-		sub:     adapter,
-		channel: opts.Channel,
-		onError: opts.OnError,
+		hub:      hub,
+		client:   adapter,
+		sub:      adapter,
+		channel:  opts.Channel,
+		onError:  opts.OnError,
+		shutdown: shutdown,
 	}
 }
 
-// NewLocal skips Redis and feeds the Hub directly, for when there is no Redis to
-// reach. Not a degraded mode: a single process has no other pods to reach.
+// NewLocal feeds the Hub directly. Not a degraded mode: a single process, or an
+// event type that does not need cross-pod delivery, has no other pods to reach.
 func NewLocal[T Keyed](hub *Hub[T]) Service[T] {
 	return &local[T]{hub: hub}
 }

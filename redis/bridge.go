@@ -9,9 +9,7 @@ import (
 	goredis "github.com/redis/go-redis/v9"
 )
 
-// Kept as interfaces so both directions are testable without a live server --
-// which matters when the dev cluster runs a single pod and can never exercise
-// cross-pod delivery for real.
+// Interfaces so both directions are testable without a live server.
 type redisPublisher interface {
 	Publish(ctx context.Context, channel string, payload []byte) error
 }
@@ -20,14 +18,28 @@ type redisSubscriber interface {
 	Subscribe(ctx context.Context, channel string) <-chan string
 }
 
-// bridge carries events between pods. Every pod publishes what it produces and
-// every pod subscribes, so a connection held by pod A sees an event from pod B.
+// bridge carries events between pods: every pod publishes and every pod
+// subscribes, so a connection on pod A sees an event from pod B.
 type bridge[T Keyed] struct {
-	hub     *Hub[T]
-	client  redisPublisher
-	sub     redisSubscriber
-	channel string
-	onError func(ctx context.Context, err error)
+	hub      *Hub[T]
+	client   redisPublisher
+	sub      redisSubscriber
+	channel  string
+	onError  func(ctx context.Context, err error)
+	shutdown <-chan struct{}
+}
+
+// stopping reports whether the subscription ended because someone asked for it.
+func (b *bridge[T]) stopping(ctx context.Context) bool {
+	if ctx.Err() != nil {
+		return true
+	}
+	select {
+	case <-b.shutdown:
+		return true
+	default:
+		return false
+	}
 }
 
 // Run consumes the subscription until ctx is cancelled. One per pod.
@@ -39,10 +51,10 @@ func (b *bridge[T]) Run(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case msg, ok := <-messages:
-			// Only unexpected when ctx is still live: losing the subscription
-			// then means this pod silently stops seeing other pods' events.
+			// Losing the subscription unasked means this pod silently stops
+			// seeing other pods' events -- nothing crashes, so say so.
 			if !ok {
-				if ctx.Err() == nil && b.onError != nil {
+				if !b.stopping(ctx) && b.onError != nil {
 					b.onError(ctx, errors.New("subscription closed"))
 				}
 				return
@@ -54,9 +66,8 @@ func (b *bridge[T]) Run(ctx context.Context) {
 	}
 }
 
-// Publish reaches every pod including this one -- the local Hub is fed by the
-// subscription rather than directly, so local and remote delivery cannot diverge
-// in ordering.
+// Reaches every pod including this one -- the local Hub is fed by the
+// subscription, not directly, so ordering cannot diverge.
 func (b *bridge[T]) Publish(ctx context.Context, ev T) error {
 	payload, err := json.Marshal(ev)
 	if err != nil {
@@ -69,8 +80,8 @@ func (b *bridge[T]) Publish(ctx context.Context, ev T) error {
 	return nil
 }
 
-// All pods share one channel, so a pod sees every room's events and filters
-// locally: Broadcast is a no-op when nobody here is watching that room.
+// One channel carries every room, so Broadcast is a no-op when nobody here is
+// watching the one this event names.
 func (b *bridge[T]) dispatch(payload []byte) error {
 	var ev T
 	if err := json.Unmarshal(payload, &ev); err != nil {
@@ -81,8 +92,8 @@ func (b *bridge[T]) dispatch(payload []byte) error {
 	return nil
 }
 
-// goRedis adapts go-redis to the two interfaces above. Thin by design -- no
-// branching of its own, so it is covered by integration checks, not unit tests.
+// goRedis adapts go-redis to the interfaces above. No branching of its own, so
+// it is covered by integration checks rather than unit tests.
 type goRedis struct {
 	rdb *goredis.Client
 }
@@ -91,17 +102,15 @@ func (g *goRedis) Publish(ctx context.Context, channel string, payload []byte) e
 	return g.rdb.Publish(ctx, channel, payload).Err()
 }
 
-// go-redis reconnects and re-issues the subscription internally, so the returned
-// channel survives a Redis blip; events published during the outage are missed.
+// go-redis reconnects and re-subscribes internally, so the returned channel
+// survives a blip; events published during the outage are missed.
 func (g *goRedis) Subscribe(ctx context.Context, channel string) <-chan string {
 	pubsub := g.rdb.Subscribe(ctx, channel)
 	out := make(chan string)
 
-	// Ranging over pubsub.Channel() blocks until a message arrives, so a
-	// cancelled context alone would leave this goroutine and the Redis
-	// connection stuck on an idle channel. Closing the subscription is what
-	// unblocks it. The ctx passed to Subscribe only covers the initial SUBSCRIBE
-	// command; go-redis does not tear the subscription down with it.
+	// Ranging below blocks until a message arrives, so cancelling ctx alone would
+	// strand this goroutine -- closing the subscription is what unblocks it, and
+	// go-redis does not do that on ctx.
 	unregister := context.AfterFunc(ctx, func() { pubsub.Close() })
 
 	go func() {
