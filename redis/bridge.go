@@ -20,6 +20,9 @@ type redisSubscriber interface {
 
 // bridge carries events between pods: every pod publishes and every pod
 // subscribes, so a connection on pod A sees an event from pod B.
+//
+// client, sub and shutdown are set by tests. Production leaves them nil and
+// resolves the module connection per call, because New can run before Initialize.
 type bridge[T Keyed] struct {
 	hub      *Hub[T]
 	client   redisPublisher
@@ -29,13 +32,47 @@ type bridge[T Keyed] struct {
 	shutdown <-chan struct{}
 }
 
+var errNotInitialized = errors.New("mq/redis: Initialize has not run")
+
+func (b *bridge[T]) publisher() (redisPublisher, error) {
+	if b.client != nil {
+		return b.client, nil
+	}
+	rdb, _, _ := connection()
+	if rdb == nil {
+		return nil, errNotInitialized
+	}
+	return &goRedis{rdb: rdb}, nil
+}
+
+// subscriber blocks until Initialize has run, so a Run started from package init
+// still ends up subscribed rather than quietly giving up.
+func (b *bridge[T]) subscriber(ctx context.Context) (redisSubscriber, <-chan struct{}, bool) {
+	if b.sub != nil {
+		return b.sub, b.shutdown, true
+	}
+
+	_, _, initialized := connection()
+	select {
+	case <-initialized:
+	case <-ctx.Done():
+		return nil, nil, false
+	}
+
+	rdb, done, _ := connection()
+	if rdb == nil {
+		return nil, nil, false
+	}
+	return &goRedis{rdb: rdb}, done, true
+}
+
 // stopping reports whether the subscription ended because someone asked for it.
-func (b *bridge[T]) stopping(ctx context.Context) bool {
+func (b *bridge[T]) stopping(ctx context.Context, done <-chan struct{}) bool {
 	if ctx.Err() != nil {
 		return true
 	}
 	select {
-	case <-b.shutdown:
+	case <-done:
 		return true
 	default:
 		return false
@@ -44,7 +81,12 @@ func (b *bridge[T]) stopping(ctx context.Context) bool {
 
 // Run consumes the subscription until ctx is cancelled. One per pod.
 func (b *bridge[T]) Run(ctx context.Context) {
-	messages := b.sub.Subscribe(ctx, b.channel)
+	sub, done, ok := b.subscriber(ctx)
+	if !ok {
+		return
+	}
+
+	messages := sub.Subscribe(ctx, b.channel)
 
 	for {
 		select {
@@ -54,7 +96,7 @@ func (b *bridge[T]) Run(ctx context.Context) {
 			// Losing the subscription unasked means this pod silently stops
 			// seeing other pods' events -- nothing crashes, so say so.
 			if !ok {
-				if !b.stopping(ctx) && b.onError != nil {
+				if !b.stopping(ctx, done) && b.onError != nil {
 					b.onError(ctx, errors.New("subscription closed"))
 				}
 				return
@@ -69,12 +111,17 @@ func (b *bridge[T]) Run(ctx context.Context) {
 // Reaches every pod including this one -- the local Hub is fed by the
 // subscription, not directly, so ordering cannot diverge.
 func (b *bridge[T]) Publish(ctx context.Context, ev T) error {
+	pub, err := b.publisher()
+	if err != nil {
+		return err
+	}
+
 	payload, err := json.Marshal(ev)
 	if err != nil {
 		return fmt.Errorf("marshal event for key %s: %w", ev.Key(), err)
 	}
 
-	if err := b.client.Publish(ctx, b.channel, payload); err != nil {
+	if err := pub.Publish(ctx, b.channel, payload); err != nil {
 		return fmt.Errorf("publish to channel %s for key %s: %w", b.channel, ev.Key(), err)
 	}
 	return nil
