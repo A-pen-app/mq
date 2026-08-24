@@ -45,8 +45,7 @@ const (
 	SvcKeyUserDeleted                   SvcActionType = "user_deleted"
 	SvcKeyHireSubscriptionPauseReminder SvcActionType = "hire_subscription_pause_reminder"
 	SvcKeyHireSubscriptionAutoResumed   SvcActionType = "hire_subscription_auto_resumed"
-	SvcKeyPasswordChanged               SvcActionType = "password_changed"
-	SvcKeyEmailVerified                 SvcActionType = "email_verified"
+	SvcKeyCredentialChanged             SvcActionType = "credential_changed"
 )
 
 type Reward struct {
