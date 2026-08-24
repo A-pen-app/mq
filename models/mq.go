@@ -17,6 +17,7 @@ const (
 	ReceiverTypeShop      ReceiverType = "shop"
 	ReceiverTypeDelibird  ReceiverType = "delibird"
 	ReceiverTypeMeetup    ReceiverType = "meetup"
+	ReceiverTypeMedgo     ReceiverType = "medgo"
 )
 
 const (
