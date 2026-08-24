@@ -45,6 +45,10 @@ const (
 	SvcKeyUserDeleted                   SvcActionType = "user_deleted"
 	SvcKeyHireSubscriptionPauseReminder SvcActionType = "hire_subscription_pause_reminder"
 	SvcKeyHireSubscriptionAutoResumed   SvcActionType = "hire_subscription_auto_resumed"
+	// 帳號憑證在 App 端被改動。事件不帶新值——收件者拿 AppUserID 去讀平台當下的
+	// 那一筆，亂序或重送都會收斂到同一個結果。
+	SvcKeyPasswordChanged SvcActionType = "password_changed"
+	SvcKeyEmailVerified   SvcActionType = "email_verified"
 )
 
 type Reward struct {
