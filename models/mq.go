@@ -68,3 +68,8 @@ func (m *Message) Nack() {
 		m.NackFunc()
 	}
 }
+
+// TopicPath names a topic in another project; pubsub resolves it on send.
+func TopicPath(project, topic string) string {
+	return "projects/" + project + "/topics/" + topic
+}
