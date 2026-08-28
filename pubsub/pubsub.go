@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
@@ -47,11 +48,27 @@ func Initialize(ctx context.Context, config *Config) {
 	}
 
 	for topic := range config.Topics {
-		t := newClient.Topic(topic)
-		publisher[topic] = t
+		publisher[topic] = topicHandle(newClient, topic)
 	}
 	c = config
 	client = newClient
+}
+
+// topicHandle resolves a full projects/<p>/topics/<t> name to that project;
+// anything else is a topic in this client's project.
+func topicHandle(cl *pubsub.Client, key string) *pubsub.Topic {
+	if p, t, ok := parseTopicPath(key); ok {
+		return cl.TopicInProject(t, p)
+	}
+	return cl.Topic(key)
+}
+
+func parseTopicPath(key string) (project, topic string, ok bool) {
+	parts := strings.Split(key, "/")
+	if len(parts) != 4 || parts[0] != "projects" || parts[2] != "topics" || parts[1] == "" || parts[3] == "" {
+		return "", "", false
+	}
+	return parts[1], parts[3], true
 }
 
 // getSubscription returns a subscription handle, using SubscriptionInProject if ProjectID is set
