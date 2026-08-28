@@ -17,6 +17,8 @@ type SvcActionEvent struct {
 	Reward      *Reward       `json:"reward"`
 	Status      interface{}   `json:"status"`
 	ExpiredAt   *time.Time    `json:"expired_at"`
+	// On the hire_order_* actions; ParamID is the order id.
+	Order *Order `json:"order"`
 }
 
 type ActionType string
@@ -46,11 +48,41 @@ const (
 	SvcKeyHireSubscriptionPauseReminder SvcActionType = "hire_subscription_pause_reminder"
 	SvcKeyHireSubscriptionAutoResumed   SvcActionType = "hire_subscription_auto_resumed"
 	SvcKeyCredentialChanged             SvcActionType = "credential_changed"
+	// A web hire order moved; shop publishes, medgo mails the vendor. The
+	// transfer pair is ATM-only; paid covers both methods (Order.Method).
+	SvcKeyHireOrderAwaitingTransfer SvcActionType = "hire_order_awaiting_transfer"
+	SvcKeyHireOrderPaid             SvcActionType = "hire_order_paid"
+	SvcKeyHireOrderTransferExpired  SvcActionType = "hire_order_transfer_expired"
 )
 
 type Reward struct {
 	Currency string `json:"currency"`
 	Quantity string `json:"quantity"`
+}
+
+type PaymentMethod string
+
+const (
+	PaymentMethodATM    PaymentMethod = "atm"
+	PaymentMethodCredit PaymentMethod = "credit"
+)
+
+// Order is what the mail needs that the event does not already carry —
+// the platform is PackageName, the id ParamID, the deadline ExpiredAt.
+type Order struct {
+	Months    int           `json:"months"`
+	Quantity  int           `json:"quantity"`
+	AmountTWD int           `json:"amount_twd"`
+	Method    PaymentMethod `json:"method"`
+
+	// Set on hire_order_awaiting_transfer.
+	BankCode       string `json:"bank_code,omitempty"`
+	VirtualAccount string `json:"virtual_account,omitempty"`
+
+	// Set on hire_order_paid. Queued marks a renewal that is paid but waits
+	// for the live subscription to lapse before it starts.
+	PaidAt *time.Time `json:"paid_at,omitempty"`
+	Queued bool       `json:"queued,omitempty"`
 }
 
 type ConsumeType string
