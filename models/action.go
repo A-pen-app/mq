@@ -80,9 +80,15 @@ type Order struct {
 	VirtualAccount string `json:"virtual_account,omitempty"`
 
 	// Set on hire_order_paid. Queued marks a renewal that is paid but waits
-	// for the live subscription to lapse before it starts.
-	PaidAt *time.Time `json:"paid_at,omitempty"`
-	Queued bool       `json:"queued,omitempty"`
+	// for the live subscription to lapse before it starts, which is also why
+	// a queued order carries no StartsAt/EndsAt: it has no dates yet.
+	PaidAt   *time.Time `json:"paid_at,omitempty"`
+	Queued   bool       `json:"queued,omitempty"`
+	StartsAt *time.Time `json:"starts_at,omitempty"`
+	EndsAt   *time.Time `json:"ends_at,omitempty"`
+
+	// When the buyer placed the order. The cancellation mail shows it.
+	CreatedAt *time.Time `json:"created_at,omitempty"`
 }
 
 type ConsumeType string
