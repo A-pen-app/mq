@@ -55,6 +55,11 @@ const (
 	SvcKeyHireOrderAwaitingTransfer SvcActionType = "hire_order_awaiting_transfer"
 	SvcKeyHireOrderPaid             SvcActionType = "hire_order_paid"
 	SvcKeyHireOrderTransferExpired  SvcActionType = "hire_order_transfer_expired"
+	// A recruiter paused or resumed hiring themselves, or the subscription is
+	// about to expire; shop publishes, medgo mails the vendor.
+	SvcKeyHireSubscriptionPaused   SvcActionType = "hire_subscription_paused"
+	SvcKeyHireSubscriptionResumed  SvcActionType = "hire_subscription_resumed"
+	SvcKeyHireSubscriptionExpiring SvcActionType = "hire_subscription_expiring"
 )
 
 type Reward struct {
