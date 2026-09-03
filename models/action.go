@@ -17,6 +17,8 @@ type SvcActionEvent struct {
 	Reward      *Reward       `json:"reward"`
 	Status      interface{}   `json:"status"`
 	ExpiredAt   *time.Time    `json:"expired_at"`
+	// On hire_subscription_pause_reminder; ExpiredAt is then the auto-resume time.
+	PausedAt *time.Time `json:"paused_at,omitempty"`
 	// On the hire_order_* actions; ParamID is the order id.
 	Order *Order `json:"order"`
 }
