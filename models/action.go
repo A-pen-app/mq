@@ -60,6 +60,27 @@ const (
 	SvcKeyHireSubscriptionPaused   SvcActionType = "hire_subscription_paused"
 	SvcKeyHireSubscriptionResumed  SvcActionType = "hire_subscription_resumed"
 	SvcKeyHireSubscriptionExpiring SvcActionType = "hire_subscription_expiring"
+	// The hot feed's intent survey card (apen-api, PROD-170). apen tells shop
+	// two facts, with ParamID the Amplitude survey key on both: served, the
+	// card first went out to the user; completed, the user answered it. Shop
+	// answers every completed with rewarded, Status one of the
+	// IntentSurveyRewardStatus values, Reward set when coins were granted.
+	SvcKeyIntentSurveyServed    SvcActionType = "intent_survey_served"
+	SvcKeyIntentSurveyCompleted SvcActionType = "intent_survey_completed"
+	SvcKeyIntentSurveyRewarded  SvcActionType = "intent_survey_rewarded"
+)
+
+// IntentSurveyRewardStatus is the Status of an intent_survey_rewarded event:
+// what shop did with one completed report. Every value but paused is final.
+type IntentSurveyRewardStatus string
+
+const (
+	IntentSurveyRewardGranted    IntentSurveyRewardStatus = "granted"     // coins granted by this report; Reward says how many
+	IntentSurveyRewardAlready    IntentSurveyRewardStatus = "already"     // granted by an earlier report of the same completion
+	IntentSurveyRewardCapReached IntentSurveyRewardStatus = "cap_reached" // the mission's total cap is spent
+	IntentSurveyRewardCancelled  IntentSurveyRewardStatus = "cancelled"   // the mission was cancelled
+	IntentSurveyRewardPaused     IntentSurveyRewardStatus = "paused"      // the mission is paused; the sender may report again later
+	IntentSurveyRewardNoMission  IntentSurveyRewardStatus = "no_mission"  // no active mission is bound to this survey
 )
 
 type Reward struct {
