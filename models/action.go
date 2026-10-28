@@ -71,16 +71,15 @@ const (
 )
 
 // IntentSurveyRewardStatus is the Status of an intent_survey_rewarded event:
-// what shop did with one completed report. Every value but paused is final.
+// what shop did with one completed report. Every value is final; the sender
+// never reports the same completion again once answered.
 type IntentSurveyRewardStatus string
 
 const (
 	IntentSurveyRewardGranted    IntentSurveyRewardStatus = "granted"     // coins granted by this report; Reward says how many
 	IntentSurveyRewardAlready    IntentSurveyRewardStatus = "already"     // granted by an earlier report of the same completion
 	IntentSurveyRewardCapReached IntentSurveyRewardStatus = "cap_reached" // the mission's total cap is spent
-	IntentSurveyRewardCancelled  IntentSurveyRewardStatus = "cancelled"   // the mission was cancelled
-	IntentSurveyRewardPaused     IntentSurveyRewardStatus = "paused"      // the mission is paused; the sender may report again later
-	IntentSurveyRewardNoMission  IntentSurveyRewardStatus = "no_mission"  // no active mission is bound to this survey
+	IntentSurveyRewardNoMission  IntentSurveyRewardStatus = "no_mission"  // no live mission is bound to this survey (never created, ended or deleted)
 )
 
 type Reward struct {
