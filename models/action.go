@@ -61,7 +61,7 @@ const (
 	SvcKeyHireSubscriptionResumed  SvcActionType = "hire_subscription_resumed"
 	SvcKeyHireSubscriptionExpiring SvcActionType = "hire_subscription_expiring"
 	// The hot feed's intent survey card (apen-api, PROD-170). apen tells shop
-	// two facts, with ParamID the Amplitude survey key on both: served, the
+	// two facts, with ParamID the Amplitude survey id on both: served, the
 	// card first went out to the user; completed, the user answered it. Shop
 	// answers every completed with rewarded, Status one of the
 	// IntentSurveyRewardStatus values, Reward set when coins were granted.
@@ -79,7 +79,10 @@ const (
 	IntentSurveyRewardGranted    IntentSurveyRewardStatus = "granted"     // coins granted by this report; Reward says how many
 	IntentSurveyRewardAlready    IntentSurveyRewardStatus = "already"     // granted by an earlier report of the same completion
 	IntentSurveyRewardCapReached IntentSurveyRewardStatus = "cap_reached" // the mission's total cap is spent
-	IntentSurveyRewardNoMission  IntentSurveyRewardStatus = "no_mission"  // no live mission is bound to this survey (never created, ended or deleted)
+	// no live mission is bound to this survey: none was ever created, or the
+	// one there is was ended or deleted, is inactive, expired or not started
+	// yet, or belongs to another app.
+	IntentSurveyRewardNoMission IntentSurveyRewardStatus = "no_mission"
 )
 
 type Reward struct {
