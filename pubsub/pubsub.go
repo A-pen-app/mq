@@ -293,6 +293,7 @@ func (ps *Store) ReceiveWithAck(ctx context.Context, topic string) (<-chan *mode
 			defer span.End()
 
 			wrappedMsg := &models.Message{
+				ID:       msg.ID,
 				Data:     msg.Data,
 				AckFunc:  func() { msg.Ack() },
 				NackFunc: func() { msg.Nack() },

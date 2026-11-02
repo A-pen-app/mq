@@ -52,6 +52,12 @@ func WithAttributes(attributes *Attributes) GetMQOption {
 }
 
 type Message struct {
+	// ID is the broker's message id (Pub/Sub message ID), unique within its
+	// topic only. A redelivery from the same subscription carries the same ID,
+	// so a receiver can tell a redelivery by it. The same content published
+	// twice is two messages with two IDs; telling those apart needs a key from
+	// the content.
+	ID       string
 	Data     []byte
 	AckFunc  func()
 	NackFunc func()
