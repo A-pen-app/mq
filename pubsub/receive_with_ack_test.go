@@ -66,22 +66,31 @@ func TestReceiveWithAckMessageID(t *testing.T) {
 	next := func() *models.Message {
 		t.Helper()
 		select {
-		case m := <-msgCh:
+		case m, ok := <-msgCh:
+			if !ok {
+				t.Fatal("msgCh closed")
+			}
+			if m.ID == "" {
+				t.Fatal("message without an ID")
+			}
 			return m
-		case err := <-errCh:
-			t.Fatalf("receive: %v", err)
+		case err, ok := <-errCh:
+			if ok {
+				t.Fatalf("receive: %v", err)
+			}
+			t.Fatal("errCh closed")
 		case <-ctx.Done():
 			t.Fatal("no message")
 		}
 		return nil
 	}
 
+	// Not nacked: pstest reuses the message ID as the ack ID, and a redelivery
+	// can race the client's pending nack for it, so a redelivery test would
+	// flake (7 of 20 runs with -race).
 	received := map[string]bool{}
 	for len(received) < len(published) {
 		m := next()
-		if m.ID == "" {
-			t.Fatal("message without an ID")
-		}
 		received[m.ID] = true
 		m.Ack()
 	}
