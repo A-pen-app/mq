@@ -21,6 +21,11 @@ type SvcActionEvent struct {
 	PausedAt *time.Time `json:"paused_at,omitempty"`
 	// On the hire_order_* actions; ParamID is the order id.
 	Order *Order `json:"order"`
+	// On intent_survey_completed: when the user answered the survey. The
+	// report can reach shop long after the answer (recovered from analytics,
+	// or resent after no answer), so shop judges the mission window by this
+	// time rather than by when the report arrives; nil means use the arrival.
+	CompletedAt *time.Time `json:"completed_at,omitempty"`
 }
 
 type ActionType string
